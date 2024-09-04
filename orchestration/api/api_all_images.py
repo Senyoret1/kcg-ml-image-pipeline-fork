@@ -2,6 +2,9 @@ from fastapi import Request, HTTPException, APIRouter, Response, Query, status, 
 from datetime import datetime, timedelta
 from typing import Optional
 import pymongo
+from orchestration.api.api_controllers.all_images.all_images_db_controller import AllImagesDbController
+from orchestration.api.utils.date_filter_objects import DateFilterParams, ElapsedTimeFilterParams, ElapsedTimeUnit
+from orchestration.api.utils.datetime_utils import DatetimeUtils
 from utility.minio import cmd
 from utility.path import separate_bucket_and_file_path
 from .mongo_schemas import Task, ImageMetadata, UUIDImageMetadata, ListTask
@@ -36,72 +39,28 @@ async def list_all_images(
 ):
     response_handler = await ApiResponseHandlerV1.createInstance(request)
     try:
-        query = {}
-
-        # Add the OR conditions for buckets and datasets
-        if bucket_ids or dataset_ids:
-            query_conditions = []
-            if bucket_ids:
-                query_conditions.append({"bucket_id": {"$in": bucket_ids}})
-            if dataset_ids:
-                query_conditions.append({"dataset_id": {"$in": dataset_ids}})
-            if query_conditions:
-                query = {"$or": query_conditions}
-
-        print(f"Initial query conditions: {query}")
-
-        # Add date filters to the query
-        date_query = {}
-        if start_date:
-            start_date_unix = api_date_to_unix_int32(start_date)
-            if start_date_unix is None:
+        date_filter = None
+        if time_interval != None:
+            if (time_unit != 'minutes' and time_unit != 'hours'):
                 return response_handler.create_error_response_v1(
                     error_code=ErrorCode.OTHER_ERROR,
-                    error_string="Invalid start_date format. Expected format: YYYY-MM-DDTHH:MM:SS",
+                    error_string="Invalid time_unit value",
                     http_status_code=422
                 )
-            date_query['$gte'] = start_date_unix
-        if end_date:
-            end_date_unix = api_date_to_unix_int32(end_date)
-            if end_date_unix is None:
-                return response_handler.create_error_response_v1(
-                    error_code=ErrorCode.OTHER_ERROR,
-                    error_string="Invalid end_date format. Expected format: YYYY-MM-DDTHH:MM:SS",
-                    http_status_code=422
-                )
-            date_query['$lte'] = end_date_unix
-                
 
-        print(f"Date query after adding start_date and end_date: {date_query}")
+            date_filter = ElapsedTimeFilterParams.create_instance(
+                ElapsedTimeUnit.HOURS if time_unit == 'hours' else ElapsedTimeUnit.MINUTES,
+                time_interval
+            )
+        elif start_date != None or end_date != None:
+            date_filter = DateFilterParams.create_instance(
+                DatetimeUtils.get_datetime_from_api_string(start_date) if start_date != None else None,
+                DatetimeUtils.get_datetime_from_api_string(end_date) if end_date != None else None
+            )
 
-        # Calculate the time threshold based on the current time and the specified interval
-        if time_interval is not None:
-            current_time = datetime.utcnow()
-            if time_unit == "minutes":
-                threshold_time = current_time - timedelta(minutes=time_interval)
-            elif time_unit == "hours":
-                threshold_time = current_time - timedelta(hours=time_interval)
-            else:
-                raise HTTPException(status_code=400, detail="Invalid time unit. Use 'minutes' or 'hours'.")
-            date_query['$gte'] = int(threshold_time.timestamp())
-
-        print(f"Date query after adding time interval: {date_query}")
-
-        if date_query:
-            query['date'] = date_query
-
-        print(f"Final query: {query}")
-
-        # Decide the sort order based on the 'order' parameter
-        sort_order = -1 if order == "desc" else 1
-
-        # Query the collection with pagination and sorting
-        cursor = request.app.all_image_collection.find(query).sort('date', sort_order).skip(offset).limit(limit)
-        images = list(cursor)
-
-        print(f"Number of images found: {len(images)}")
-
-        AllImagesHelpers.clean_image_list_for_api_response(images)
+        images = AllImagesDbController.get_instance().list_images_with_filtering_and_pagination(
+            bucket_ids, dataset_ids, limit, offset, order == 'asc', date_filter
+        )
 
         return response_handler.create_success_response_v1(
             response_data={"images": images},
@@ -127,7 +86,7 @@ async def get_image_by_hash(request: Request, image_hash: str):
     
     try:
         # Find the image in the all-images collection by its hash
-        image_data = request.app.all_image_collection.find_one({"image_hash": image_hash})
+        image_data = AllImagesDbController.get_instance().find_image_by_hash(image_hash)
         
         if image_data is None:
             return api_response_handler.create_error_response_v1(
@@ -135,8 +94,7 @@ async def get_image_by_hash(request: Request, image_hash: str):
                 error_string="Image with this hash does not exist in the all-images collection",
                 http_status_code=404
             )
-        
-        AllImagesHelpers.clean_image_for_api_response(image_data)
+
         # Return the found image data
         return api_response_handler.create_success_response_v1(
             response_data=image_data,

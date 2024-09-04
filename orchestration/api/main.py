@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import pymongo
 from bson.objectid import ObjectId
 from fastapi.responses import JSONResponse
+
+from orchestration.api.api_controllers.all_images.all_images_db_controller import AllImagesDbController
 from .api_utils import ApiResponseHandlerV1, PrettyJSONResponse, ApiResponseHandler, ErrorCode,  StandardErrorResponseV1, StandardSuccessResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi import status, Request
@@ -232,19 +234,7 @@ def startup_db_client():
     # dataset rate
     app.dataset_config_collection = app.mongodb_db["dataset_config"]
 
-    app.all_image_collection = app.mongodb_db["all-images"]
-
-    all_images_hash_index=[
-    ('image_hash', pymongo.ASCENDING)
-    ]
-    create_index_if_not_exists(app.all_image_collection ,all_images_hash_index, 'all_images_hash_index')
-
-    all_images_hash_and_bucket_index=[
-    ('image_hash', pymongo.ASCENDING),
-    ('bucket_id', pymongo.ASCENDING)
-    ]
-    create_index_if_not_exists(app.all_image_collection ,all_images_hash_and_bucket_index, 'all_images_hash_and_bucket_index')
-
+    app.all_image_collection = AllImagesDbController.get_instance().prepare(app.mongodb_db)
 
     # bucket collection
 
