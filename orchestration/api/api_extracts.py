@@ -134,8 +134,7 @@ async def add_extract(request: Request, image_data: ExtractImageData):
             data_to_save['uuid'] = uuid.UUID(image_data.uuid)
 
             # Insert into all-images collection, generating the image_uuid within the function
-            all_images_collection = request.app.all_image_collection
-            image_uuid = insert_into_all_images(data_to_save, dataset_id, all_images_collection)
+            image_uuid = insert_into_all_images(data_to_save, dataset_id)
 
             # Update the image data with the new image_uuid
             if image_uuid:
@@ -241,8 +240,7 @@ async def add_extract(request: Request, image_data: ExtractImageDataV1):
             image_data_dict['file_path'] = get_minio_file_path(next_seq_id, "extracts", image_data.dataset, 'jpg')
 
             # Insert into all-images collection and get the image_uuid
-            all_images_collection = request.app.all_image_collection
-            image_uuid = insert_into_all_images(image_data_dict, dataset_id, all_images_collection)
+            image_uuid = insert_into_all_images(image_data_dict, dataset_id)
 
             # Add the image_uuid to the image_data_dict
             image_data_dict['image_uuid'] = image_uuid

@@ -2,6 +2,7 @@ import uuid
 from fastapi import Request, HTTPException, APIRouter, Response, Query, status
 from datetime import datetime, timedelta
 import pymongo 
+from orchestration.api.api_controllers.all_images.all_images_db_controller import AllImagesDbController
 from utility.minio import cmd
 from orchestration.api.mongo_schema.active_learning_schemas import RankSelection, ListResponseRankSelection, ResponseRankSelection, FlaggedResponse, JsonMinioResponse, RankSelectionV1
 from .api_utils import ApiResponseHandlerV1, ErrorCode, StandardSuccessResponseV1, StandardErrorResponseV1, WasPresentResponse, CountResponse, IrrelevantResponse, ListIrrelevantResponse, BoolIrrelevantResponse, ListGenerationsCountPerDayResponse, IrrelevantResponseV1
@@ -428,10 +429,7 @@ async def add_datapoints(request: Request, selection: RankSelection, image_sourc
 
         # Get image_uuid for image_1_metadata
         image_1_hash = dict_data['image_1_metadata']['file_hash']
-        image_1_uuid = request.app.all_image_collection.find_one(
-            {"image_hash": image_1_hash, "bucket_id": get_bucket_id(image_source)},
-            {"uuid": 1}
-        )
+        image_1_uuid = AllImagesDbController.get_instance().find_image_by_hash(image_1_hash, get_bucket_id(image_source), {"uuid": 1})
         if image_1_uuid:
             dict_data['image_1_metadata']['image_uuid'] = image_1_uuid['uuid']
         else:
@@ -439,10 +437,7 @@ async def add_datapoints(request: Request, selection: RankSelection, image_sourc
 
         # Get image_uuid for image_2_metadata
         image_2_hash = dict_data['image_2_metadata']['file_hash']
-        image_2_uuid = request.app.all_image_collection.find_one(
-            {"image_hash": image_2_hash, "bucket_id": get_bucket_id(image_source)},
-            {"uuid": 1}
-        )
+        image_2_uuid = AllImagesDbController.get_instance().find_image_by_hash(image_2_hash, get_bucket_id(image_source), {"uuid": 1})
         if image_2_uuid:
             dict_data['image_2_metadata']['image_uuid'] = image_2_uuid['uuid']
         else:
@@ -547,10 +542,7 @@ async def add_datapoints_v1(request: Request, selection: RankSelectionV1):
         # Fetch image_uuid for image_1_metadata
         image_1_hash = dict_data['image_1_metadata']['file_hash']
         image_1_source = dict_data['image_1_metadata']['image_source']
-        image_1_uuid = request.app.all_image_collection.find_one(
-            {"image_hash": image_1_hash, "bucket_id": get_bucket_id(image_1_source)},
-            {"uuid": 1}
-        )
+        image_1_uuid = AllImagesDbController.get_instance().find_image_by_hash(image_1_hash, get_bucket_id(image_1_source), {"uuid": 1})
         if image_1_uuid:
             dict_data['image_1_metadata']['image_uuid'] = image_1_uuid['uuid']
         else:
@@ -559,10 +551,7 @@ async def add_datapoints_v1(request: Request, selection: RankSelectionV1):
         # Fetch image_uuid for image_2_metadata
         image_2_hash = dict_data['image_2_metadata']['file_hash']
         image_2_source = dict_data['image_2_metadata']['image_source']
-        image_2_uuid = request.app.all_image_collection.find_one(
-            {"image_hash": image_2_hash, "bucket_id": get_bucket_id(image_2_source)},
-            {"uuid": 1}
-        )
+        image_2_uuid = AllImagesDbController.get_instance().find_image_by_hash(image_2_hash, get_bucket_id(image_2_source), {"uuid": 1})
         if image_2_uuid:
             dict_data['image_2_metadata']['image_uuid'] = image_2_uuid['uuid']
         else:

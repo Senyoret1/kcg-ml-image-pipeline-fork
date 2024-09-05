@@ -6,6 +6,7 @@ from bson.objectid import ObjectId
 from fastapi.responses import JSONResponse
 
 from orchestration.api.api_controllers.all_images.all_images_db_controller import AllImagesDbController
+from orchestration.api.api_controllers.all_images.all_images_db_schemas import AllImagesDbSchemas
 from .api_utils import ApiResponseHandlerV1, PrettyJSONResponse, ApiResponseHandler, ErrorCode,  StandardErrorResponseV1, StandardSuccessResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi import status, Request
@@ -545,11 +546,12 @@ def startup_db_client():
 
 
     print("Connected to the MongoDB database!")
-
+    '''
     # get minio client
     app.minio_client = get_minio_client(minio_ip_addr=config["MINIO_ADDRESS"],
                                         minio_access_key=config["MINIO_ACCESS_KEY"],
                                         minio_secret_key=config["MINIO_SECRET_KEY"])
+    '''
 
 
 @app.on_event("shutdown")

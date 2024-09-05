@@ -15,6 +15,8 @@ class AllImagesResponse(BaseModel):
     image_path: str
     date: int            
 
+class InvalidAllImagesEntriesResponse(BaseModel):
+    List[dict]
 
 class ListAllImagesResponse(BaseModel):
     images: List[AllImagesResponse]

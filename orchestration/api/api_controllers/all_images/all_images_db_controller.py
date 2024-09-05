@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from typing import List, Optional, Union
+from pydantic import validate_call
 import pymongo.collection
 from pymongo.collection import Collection
 from pymongo.database import Database
 import pymongo
 import pymongo.database
 
+from orchestration.api.api_controllers.all_images.all_images_db_schemas import AllImagesDbSchemas
 from orchestration.api.api_controllers.database_collection_controller_base import DatabaseCollectionControlletBase
 from orchestration.api.utils.date_filter_objects import DateFilterParams, ElapsedTimeFilterParams, ElapsedTimeUnit
 from orchestration.api.utils.uuid64 import Uuid64
@@ -16,6 +18,8 @@ class AllImagesDbController(DatabaseCollectionControlletBase['AllImagesDbControl
     @classmethod
     def _create_instance(cls):
         return AllImagesDbController(cls._creation_key)
+    
+    _schema = AllImagesDbSchemas.validation_schema
     
     def prepare(self, mongodb_db: Database) -> Collection:
         self._internal_preparation(mongodb_db, "all-images")
@@ -32,6 +36,19 @@ class AllImagesDbController(DatabaseCollectionControlletBase['AllImagesDbControl
         )
 
         return self.collection
+    
+    @validate_call
+    def add_image(self, data: AllImagesDbSchemas.AddDataSchema):
+        try:
+            new_document = data.model_dump()
+            new_document['uuid'] = Uuid64.from_formatted_string(data.uuid).to_mongo_value()
+            new_document['index'] = -1
+            new_document['extra_value'] = -1
+            self.collection.insert_one(new_document)
+
+            print(f"Inserted new document into all-images collection: {new_document}")
+        except Exception as e:
+            raise Exception(f"Error adding an image to the all images collection: {e}")
 
     def list_images_with_filtering_and_pagination(
         self,
@@ -88,14 +105,42 @@ class AllImagesDbController(DatabaseCollectionControlletBase['AllImagesDbControl
         except Exception as e:
             raise Exception(f"Error while getting a filtered images list from the all images collection: {e}")
         
-    def find_image_by_hash(self, image_hash: str):
+    def find_image_by_hash(self, image_hash: str, bucket_id: Optional[int] = None, values_to_get: Optional[dict] = None):
         try:
-            data = self.collection.find_one({"image_hash": image_hash})
+            query = {"image_hash": image_hash}
+            if bucket_id:
+                query["bucket_id"] = bucket_id
+
+            data = self.collection.find_one(query, values_to_get)
             self._process_data_types(data)
 
             return data
         except Exception as e:
             raise Exception(f"Error while finding an image using the {image_hash} hash in database: {e}")
+    
+    def find_images_with_invalid_schema(self):
+        try:
+            query = { "$nor": [ self._schema ] }
+
+            data = self.collection.find(query)
+            data = list(data)
+            self._process_data_types(data)
+
+            return data
+        except Exception as e:
+            raise Exception(f"Error while finding invalid images in database: {e}")
+        
+    def delete_images_by_hash(self, image_hash: str, bucket_id: Optional[int] = None):
+        try:
+            query = {"image_hash": image_hash}
+            if bucket_id:
+                query["bucket_id"] = bucket_id
+
+            result = self.collection.delete_many(query)
+
+            return result.deleted_count
+        except Exception as e:
+            raise Exception(f"Error while deleting images using the {image_hash} hash in database: {e}")
 
     def _perform_db_element_processing(self, data: dict):
         data.pop('_id', None)

@@ -12,7 +12,7 @@ from .api_utils import PrettyJSONResponse, StandardSuccessResponseV1, ApiRespons
 from .api_ranking import get_image_rank_use_count
 import os
 from .api_utils import find_or_create_next_folder_and_index
-from orchestration.api.mongo_schema.all_images_schemas import AllImagesHelpers, AllImagesResponse, ListAllImagesResponse
+from orchestration.api.mongo_schema.all_images_schemas import AllImagesHelpers, AllImagesResponse, InvalidAllImagesEntriesResponse, ListAllImagesResponse
 import io
 from typing import List
 from PIL import Image
@@ -98,6 +98,31 @@ async def get_image_by_hash(request: Request, image_hash: str):
         # Return the found image data
         return api_response_handler.create_success_response_v1(
             response_data=image_data,
+            http_status_code=200  
+        )
+    
+    except Exception as e:
+        return api_response_handler.create_error_response_v1(
+            error_code=ErrorCode.OTHER_ERROR, 
+            error_string=str(e),
+            http_status_code=500
+        )
+
+@router.get("/all-images/get-invalid-database-entries", 
+            description="Gets all the entries in the database that don't follow the expected schema",
+            tags=["all-images"],  
+            response_model=StandardSuccessResponseV1[InvalidAllImagesEntriesResponse],  
+            responses=ApiResponseHandlerV1.listErrors([404, 422, 500]))
+async def get_image_by_hash(request: Request):
+    api_response_handler = await ApiResponseHandlerV1.createInstance(request)
+    
+    try:
+        # Find the image in the all-images collection by its hash
+        invalid_entries = AllImagesDbController.get_instance().find_images_with_invalid_schema()
+
+        # Return the found image data
+        return api_response_handler.create_success_response_v1(
+            response_data=invalid_entries,
             http_status_code=200  
         )
     

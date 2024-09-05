@@ -579,8 +579,7 @@ def update_job_completed(request: Request, task: Task):
     dataset_id = dataset_result.get("dataset_id")
 
     # Insert the job details into the all-images collection and get the generated image_uuid
-    all_images_collection = request.app.all_image_collection
-    image_uuid = insert_into_all_images_for_completed(job, dataset_id, all_images_collection)
+    image_uuid = insert_into_all_images_for_completed(job, dataset_id)
 
     # Update the task object with the new image_uuid
     task_dict = task.to_dict()
@@ -1705,8 +1704,7 @@ async def update_job_completed(request: Request, uuid: str):
         dataset_id = dataset_result.get("dataset_id")
 
         # Insert into all-images collection and get the generated image_uuid
-        all_images_collection = request.app.all_image_collection
-        image_uuid = insert_into_all_images_for_completed(job, dataset_id, all_images_collection)
+        image_uuid = insert_into_all_images_for_completed(job, dataset_id)
 
         # Update job document with image_uuid
         if image_uuid:

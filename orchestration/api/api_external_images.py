@@ -76,8 +76,7 @@ async def add_external_image_data(request: Request, image_data: ExternalImageDat
                                                 image_data.image_format)
 
         # Insert into the all-images collection and retrieve the image_uuid
-        all_images_collection = request.app.all_image_collection
-        image_uuid = insert_into_all_images(image_data_dict, dataset_id, all_images_collection)
+        image_uuid = insert_into_all_images(image_data_dict, dataset_id)
 
         # Add the image_uuid to the image_data_dict and insert into the external images collection
         if image_uuid:
@@ -151,8 +150,7 @@ async def add_external_image_data_list(request: Request, image_data_list: List[E
                                                         image_data.image_format)
                 
                 # Insert into the all-images collection and retrieve the image_uuid
-                all_images_collection = request.app.all_image_collection
-                image_uuid = insert_into_all_images(image_data_dict, dataset_id, all_images_collection)
+                image_uuid = insert_into_all_images(image_data_dict, dataset_id)
 
                 # Add the image_uuid to the image_data_dict and insert into the external images collection
                 if image_uuid:

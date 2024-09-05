@@ -18,6 +18,8 @@ class DatabaseCollectionControlletBase(SingletonBase[T], Generic[T]):
     
     __properties_sort_dict: dict = None
 
+    _schema: dict = None
+
     def _internal_preparation(self, mongodb_db: Database, collection_name: str):
         if self.collection != None:
             raise Exception("The all images collection has already been prepared")
@@ -31,6 +33,10 @@ class DatabaseCollectionControlletBase(SingletonBase[T], Generic[T]):
             print(f"Collection '{collection_name}' already exists.")
         
         self.__collection = mongodb_db[self.collection_name]
+
+        if self._schema:
+            if self.__collection.options().get("validator") != self._schema:
+                mongodb_db.command("collMod", self.collection_name, validator=self._schema)
 
     def create_index_if_not_exists(self, index_key, index_name: str):
         existing_indexes = self.collection.index_information()

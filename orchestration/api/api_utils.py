@@ -8,6 +8,8 @@ import time
 from fastapi import Request
 from typing import TypeVar, Generic, List, Any, Dict, Optional
 from pydantic import BaseModel
+from orchestration.api.api_controllers.all_images.all_images_db_controller import AllImagesDbController
+from orchestration.api.api_controllers.all_images.all_images_db_schemas import AllImagesDbSchemas
 from orchestration.api.mongo_schema.tag_schemas import TagDefinition, TagCategory, ImageTag
 from orchestration.api.mongo_schema.pseudo_tag_schemas import ImagePseudoTag
 from orchestration.api.mongo_schemas import VideoMetaData
@@ -20,6 +22,8 @@ from typing import List, Union
 from urllib.parse import urlparse, parse_qs
 import random
 from minio.error import S3Error
+
+from orchestration.api.utils.uuid64 import Uuid64
 
 
 
@@ -719,71 +723,55 @@ def datetime_to_unix_int32(dt_str):
     unix_time = int(dt.timestamp())
     return unix_time & 0xFFFFFFFF
 
-def insert_into_all_images(image_data, dataset_id, all_images_collection):
-    try:
-        # Determine the bucket ID based on the file_path
-        bucket_id = determine_bucket_id(image_data.get("file_path"))
+def insert_into_all_images(image_data, dataset_id):
+    # Determine the bucket ID based on the file_path
+    bucket_id = determine_bucket_id(image_data.get("file_path"))
 
-        # Generate UUID and Unix timestamp
-        task_creation_time = image_data.get("upload_date", str(datetime.now()))
-        image_uuid = generate_uuid(task_creation_time)
-        date_int32 = datetime_to_unix_int32(task_creation_time)
+    # Generate UUID and Unix timestamp
+    task_creation_time = image_data.get("upload_date", str(datetime.utcnow()))
+    image_uuid = Uuid64.from_mongo_value(generate_uuid(task_creation_time))
+    date_int32 = datetime_to_unix_int32(task_creation_time)
 
-        # Create the document to be inserted
-        new_document = {
-            "uuid": image_uuid,
-            "index": -1,  # Not used but included as per requirement
-            "bucket_id": bucket_id,
-            "dataset_id": dataset_id,
-            "image_hash": image_data.get("image_hash"),
-            "image_path": image_data.get("file_path"),
-            "date": date_int32,
-        }
+    # Create the document to be inserted
+    new_document = AllImagesDbSchemas.AddDataSchema(
+        uuid=str(image_uuid),
+        bucket_id=bucket_id,
+        dataset_id=dataset_id,
+        image_hash=image_data.get("image_hash"),
+        image_path=image_data.get("file_path"),
+        date=date_int32
+    )
 
-        all_images_collection.insert_one(new_document)
-        print(f"Inserted new document into all-images collection: {new_document}")
+    AllImagesDbController.get_instance().add_image(new_document)
 
-        return image_uuid
+    return image_uuid.to_mongo_value()
 
-    except Exception as e:
-        print(f"Error inserting into all-images collection: {e}")
-
-
-def insert_into_all_images_for_completed(image_data, dataset_id, all_images_collection):
-    try:
-        # Determine the bucket ID based on the output file path
-        file_path = image_data.get("task_output_file_dict", {}).get("output_file_path")
-        if not file_path:
-            print("No file path found in task_output_file_dict")
-            return
-        
-        bucket_id = 0
-
-        # Generate UUID and Unix timestamp
-        task_creation_time = image_data.get("task_creation_time", str(datetime.now()))
-        image_uuid = generate_uuid(task_creation_time)
-        date_int32 = datetime_to_unix_int32(task_creation_time)
-
-        # Create the document to be inserted
-        new_document = {
-            "uuid": image_uuid,
-            "index": -1,  # Not used but included as per requirement
-            "bucket_id": bucket_id,
-            "dataset_id": dataset_id,
-            "image_hash": image_data.get("task_output_file_dict", {}).get("output_file_hash"),
-            "image_path": file_path,
-            "date": date_int32,
-        }
-
-        all_images_collection.insert_one(new_document)
-        print(f"Inserted new document into all-images collection: {new_document}")
-
-        return image_uuid  # Return the generated UUID
-
-    except Exception as e:
-        print(f"Error inserting into all-images collection: {e}")
+def insert_into_all_images_for_completed(image_data, dataset_id ):
+    # Determine the bucket ID based on the output file path
+    file_path = image_data.get("task_output_file_dict", {}).get("output_file_path")
+    if not file_path:
+        raise Exception("No file path found in task_output_file_dict")
     
+    bucket_id = 0
 
+    # Generate UUID and Unix timestamp
+    task_creation_time = image_data.get("task_creation_time", str(datetime.utcnow()))
+    image_uuid = Uuid64.from_mongo_value(generate_uuid(task_creation_time))
+    date_int32 = datetime_to_unix_int32(task_creation_time)
+
+    # Create the document to be inserted
+    new_document = AllImagesDbSchemas.AddDataSchema(
+        uuid=str(image_uuid),
+        bucket_id=bucket_id,
+        dataset_id=dataset_id,
+        image_hash=image_data.get("task_output_file_dict", {}).get("output_file_hash"),
+        image_path=file_path,
+        date=date_int32
+    )
+
+    AllImagesDbController.get_instance().add_image(new_document)
+
+    return image_uuid.to_mongo_value()  # Return the generated UUID
 
 def check_image_usage(request, image_hash):
     """
@@ -829,7 +817,7 @@ def remove_from_additional_collections(request, image_hash, bucket_id, image_sou
     and image source.
     """
     collections_to_remove = [
-        request.app.all_image_collection,
+        #request.app.all_image_collection,
         request.app.image_rank_scores_collection,
         request.app.image_classifier_scores_collection,
         request.app.image_rank_use_count_collection,
@@ -846,17 +834,24 @@ def remove_from_additional_collections(request, image_hash, bucket_id, image_sou
             request.app.image_residual_percentiles_collection,
         ])
 
+    print(f"Removing documents with image_hash: {image_hash} from {AllImagesDbController.get_instance().collection_name}")
+    amount_removed = AllImagesDbController.get_instance().delete_images_by_hash(image_hash, bucket_id)
+    print(f"Deleted {amount_removed} documents from {AllImagesDbController.get_instance().collection_name}")
+
     for collection in collections_to_remove:
         query = {}
 
         # Handle special cases
+        '''
         if collection == request.app.all_image_collection:
             query = {"image_hash": image_hash, "bucket_id": bucket_id}
             print(f"Removing documents with image_hash: {image_hash} and bucket_id: {bucket_id} from {collection.name}")
         
         elif collection in [request.app.image_rank_scores_collection, 
-                            request.app.image_classifier_scores_collection, 
-                            request.app.irrelevant_images_collection]:
+        '''
+        if collection in [request.app.image_rank_scores_collection,
+                          request.app.image_classifier_scores_collection, 
+                          request.app.irrelevant_images_collection]:
             if collection == request.app.irrelevant_images_collection:
                 query = {"file_hash": image_hash, "image_source": image_source}
             else:
