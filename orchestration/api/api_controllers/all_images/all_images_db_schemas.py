@@ -41,9 +41,18 @@ class AllImagesDbSchemas():
             }
         }
     }
-    
+
     class AddDataSchema(BaseModel):
         uuid: str
+        bucket_id: int
+        dataset_id: int
+        image_hash: str
+        image_path: str
+        date: int
+    
+    class DatabaseSchema(BaseModel):
+        uuid: str
+        index: int
         bucket_id: int
         dataset_id: int
         image_hash: str

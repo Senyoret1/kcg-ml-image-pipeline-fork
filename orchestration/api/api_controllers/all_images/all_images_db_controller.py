@@ -11,6 +11,7 @@ import pymongo.database
 
 from orchestration.api.api_controllers.all_images.all_images_db_schemas import AllImagesDbSchemas
 from orchestration.api.api_controllers.database_collection_controller_base import DatabaseCollectionControlletBase
+from orchestration.api.utils.api_operations_utils import ApiUtils
 from orchestration.api.utils.date_filter_objects import DateFilterParams, ElapsedTimeFilterParams, ElapsedTimeUnit
 from orchestration.api.utils.uuid64 import Uuid64
 
@@ -56,9 +57,9 @@ class AllImagesDbController(DatabaseCollectionControlletBase['AllImagesDbControl
         dataset_ids: Optional[List[int]],
         limit: int,
         offset: int,
-        sort_ascending: str,
+        sort_order: ApiUtils.SortOrder,
         date_filter: Optional[Union[DateFilterParams, ElapsedTimeFilterParams]]
-    ):
+    ) -> list[AllImagesDbSchemas.DatabaseSchema]:
         try:
             query = {}
 
@@ -83,9 +84,9 @@ class AllImagesDbController(DatabaseCollectionControlletBase['AllImagesDbControl
                         date_query['$lte'] = int(date_filter.final_date.timestamp())
                 if isinstance(date_filter, ElapsedTimeFilterParams):
                     current_time = datetime.utcnow()
-                    if date_filter.time_unit == ElapsedTimeUnit.MINUTES:
+                    if date_filter.time_unit == ElapsedTimeUnit.minutes:
                         threshold_time = current_time - timedelta(minutes=date_filter.time)
-                    if date_filter.time_unit == ElapsedTimeUnit.HOURS:
+                    elif date_filter.time_unit == ElapsedTimeUnit.hours:
                         threshold_time = current_time - timedelta(hours=date_filter.time)
                     else:
                         raise Exception("Invalid time unit for filtering by elapsed time.")
@@ -95,7 +96,7 @@ class AllImagesDbController(DatabaseCollectionControlletBase['AllImagesDbControl
             if date_query:
                 query['date'] = date_query
 
-            sort_order = 1 if sort_ascending else -1
+            sort_order = 1 if sort_order == ApiUtils.SortOrder.asc else -1
             cursor = self.collection.find(query).sort('date', sort_order).skip(offset).limit(limit)
             data = list(cursor)
 
@@ -105,10 +106,10 @@ class AllImagesDbController(DatabaseCollectionControlletBase['AllImagesDbControl
         except Exception as e:
             raise Exception(f"Error while getting a filtered images list from the all images collection: {e}")
         
-    def find_image_by_hash(self, image_hash: str, bucket_id: Optional[int] = None, values_to_get: Optional[dict] = None):
+    def find_image_by_hash(self, image_hash: str, bucket_id: Optional[int] = None, values_to_get: Optional[dict] = None) -> AllImagesDbSchemas.DatabaseSchema:
         try:
             query = {"image_hash": image_hash}
-            if bucket_id:
+            if bucket_id != None:
                 query["bucket_id"] = bucket_id
 
             data = self.collection.find_one(query, values_to_get)
@@ -118,7 +119,7 @@ class AllImagesDbController(DatabaseCollectionControlletBase['AllImagesDbControl
         except Exception as e:
             raise Exception(f"Error while finding an image using the {image_hash} hash in database: {e}")
     
-    def find_images_with_invalid_schema(self):
+    def find_images_with_invalid_schema(self) -> List[dict]:
         try:
             query = { "$nor": [ self._schema ] }
 
@@ -130,7 +131,7 @@ class AllImagesDbController(DatabaseCollectionControlletBase['AllImagesDbControl
         except Exception as e:
             raise Exception(f"Error while finding invalid images in database: {e}")
         
-    def delete_images_by_hash(self, image_hash: str, bucket_id: Optional[int] = None):
+    def delete_images_by_hash(self, image_hash: str, bucket_id: Optional[int] = None) -> int:
         try:
             query = {"image_hash": image_hash}
             if bucket_id:

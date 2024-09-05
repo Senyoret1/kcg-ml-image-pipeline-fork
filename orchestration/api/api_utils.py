@@ -469,7 +469,7 @@ class ApiResponseHandlerV1:
     def create_success_response_v1(
         self,
         response_data: dict,
-        http_status_code: int, 
+        http_status_code: int = 200,
         headers: dict = {},
     ):
         # Validate the provided HTTP status code

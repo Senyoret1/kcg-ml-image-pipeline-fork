@@ -1,70 +1,52 @@
-from fastapi import Request, HTTPException, APIRouter, Response, Query, status, File, UploadFile
-from datetime import datetime, timedelta
+from fastapi import Request, APIRouter, Query
 from typing import Optional
-import pymongo
+from orchestration.api.api_controllers.all_images.all_images_api_schemas import AllImagesApiSchemas
 from orchestration.api.api_controllers.all_images.all_images_db_controller import AllImagesDbController
-from orchestration.api.utils.date_filter_objects import DateFilterParams, ElapsedTimeFilterParams, ElapsedTimeUnit
-from orchestration.api.utils.datetime_utils import DatetimeUtils
-from utility.minio import cmd
-from utility.path import separate_bucket_and_file_path
-from .mongo_schemas import Task, ImageMetadata, UUIDImageMetadata, ListTask
-from .api_utils import PrettyJSONResponse, StandardSuccessResponseV1, ApiResponseHandlerV1, WasPresentResponse, ErrorCode, api_date_to_unix_int32
-from .api_ranking import get_image_rank_use_count
-import os
-from .api_utils import find_or_create_next_folder_and_index
-from orchestration.api.mongo_schema.all_images_schemas import AllImagesHelpers, AllImagesResponse, InvalidAllImagesEntriesResponse, ListAllImagesResponse
-import io
+from orchestration.api.api_controllers.all_images.all_images_db_schemas import AllImagesDbSchemas
+from orchestration.api.utils.api_operations_utils import ApiUtils
+from orchestration.api.utils.date_filter_objects import ElapsedTimeUnit, create_date_filter_from_api_values
+from .api_utils import StandardSuccessResponseV1, ApiResponseHandlerV1, ErrorCode
 from typing import List
-from PIL import Image
-import time
 
 router = APIRouter()
 
+api_tag = 'all-images'
+
 @router.get("/all-images/list-images",
-            description="list images according dataset_id and bucket_id",
-            tags=["all-images"],
-            response_model=StandardSuccessResponseV1[ListAllImagesResponse],
+            description="Gets images from the all images collection, with filtering and pagination.",
+            tags=[api_tag],
+            response_model=StandardSuccessResponseV1[AllImagesApiSchemas.EntriesListResponse],
             responses=ApiResponseHandlerV1.listErrors([422, 500]))
 async def list_all_images(
     request: Request,
-    bucket_ids: Optional[List[int]] = Query(None, description="Bucket IDs"),
-    dataset_ids: Optional[List[int]] = Query(None, description="Dataset IDs"),
-    limit: int = Query(20, description="Limit on the number of results returned"),
-    offset: int = Query(0, description="Offset for the results to be returned"),
-    order: str = Query("desc", description="Order in which the data should be returned. 'asc' for oldest first, 'desc' for newest first"),
-    start_date: Optional[str] = Query(None, description="Start date for filtering results, Must be in the format 'YYYY-MM-DDTHH:MM:SS "),
-    end_date: Optional[str] = Query(None, description="End date for filtering results, Must be in the format 'YYYY-MM-DDTHH:MM:SS"),
-    time_interval: Optional[int] = Query(None, description="Time interval in minutes or hours"),
-    time_unit: str = Query("minutes", description="Time unit, either 'minutes' or 'hours'")
+    bucket_ids: List[int] = Query(None, description="Return only images from these bucket IDs. Images from all datasets from the bucket will be retuened"),
+    dataset_ids: List[int] = Query(None, description="Return only images from these dataset IDs"),
+    limit: int = Query(20, description="Limit on the number of results returned. Use it for pagination", ge=1),
+    offset: int = Query(0, description="How many entries will be skipped before returning results. Use it for pagination", ge=0),
+    order: ApiUtils.SortOrder = Query(ApiUtils.SortOrder.desc, description="Order in which the data should be returned. 'asc' for oldest first, 'desc' for newest first"),
+    start_date: Optional[str] = Query(None, description="Start date (inclusive) for filtering results, Must be in the format 'YYYY-MM-DDTHH:MM:SS "),
+    end_date: Optional[str] = Query(None, description="End date (inclusive) for filtering results, Must be in the format 'YYYY-MM-DDTHH:MM:SS"),
+    time_interval: Optional[int] = Query(None, description="If set, only entries this old or newer will be returned. Use time_unit to se the time unit"),
+    time_unit: Optional[ElapsedTimeUnit] = Query(None, description="If the value of 'time_interval' is in minutes or seconds")
 ):
     response_handler = await ApiResponseHandlerV1.createInstance(request)
     try:
         date_filter = None
-        if time_interval != None:
-            if (time_unit != 'minutes' and time_unit != 'hours'):
-                return response_handler.create_error_response_v1(
-                    error_code=ErrorCode.OTHER_ERROR,
-                    error_string="Invalid time_unit value",
-                    http_status_code=422
-                )
-
-            date_filter = ElapsedTimeFilterParams.create_instance(
-                ElapsedTimeUnit.HOURS if time_unit == 'hours' else ElapsedTimeUnit.MINUTES,
-                time_interval
-            )
-        elif start_date != None or end_date != None:
-            date_filter = DateFilterParams.create_instance(
-                DatetimeUtils.get_datetime_from_api_string(start_date) if start_date != None else None,
-                DatetimeUtils.get_datetime_from_api_string(end_date) if end_date != None else None
+        try:
+            date_filter = create_date_filter_from_api_values(start_date, end_date, time_interval, time_unit)
+        except Exception as e:
+            return response_handler.create_error_response_v1(
+                error_code=ErrorCode.INVALID_PARAMS,
+                error_string=str(e),
+                http_status_code=422
             )
 
         images = AllImagesDbController.get_instance().list_images_with_filtering_and_pagination(
-            bucket_ids, dataset_ids, limit, offset, order == 'asc', date_filter
+            bucket_ids, dataset_ids, limit, offset, order, date_filter
         )
 
         return response_handler.create_success_response_v1(
-            response_data={"images": images},
-            http_status_code=200
+            response_data={"images": images}
         )
 
     except Exception as e:
@@ -78,15 +60,19 @@ async def list_all_images(
 
 @router.get("/all-images/get-image-by-hash", 
             description="Retrieve an image from all-images collection by its hash",
-            tags=["all-images"],  
-            response_model=StandardSuccessResponseV1[AllImagesResponse],  
+            tags=[api_tag],
+            response_model=StandardSuccessResponseV1[AllImagesDbSchemas.DatabaseSchema],
             responses=ApiResponseHandlerV1.listErrors([404, 422, 500]))
-async def get_image_by_hash(request: Request, image_hash: str):
+async def get_image_by_hash(
+    request: Request,
+    image_hash: str,
+    bucket_id: int = Query(None, description="If set, only images from this bucket will be considered. This may be useful if the same image is in more than one bucket"),
+):
     api_response_handler = await ApiResponseHandlerV1.createInstance(request)
     
     try:
         # Find the image in the all-images collection by its hash
-        image_data = AllImagesDbController.get_instance().find_image_by_hash(image_hash)
+        image_data = AllImagesDbController.get_instance().find_image_by_hash(image_hash, bucket_id)
         
         if image_data is None:
             return api_response_handler.create_error_response_v1(
@@ -97,8 +83,7 @@ async def get_image_by_hash(request: Request, image_hash: str):
 
         # Return the found image data
         return api_response_handler.create_success_response_v1(
-            response_data=image_data,
-            http_status_code=200  
+            response_data=image_data
         )
     
     except Exception as e:
@@ -110,8 +95,8 @@ async def get_image_by_hash(request: Request, image_hash: str):
 
 @router.get("/all-images/get-invalid-database-entries", 
             description="Gets all the entries in the database that don't follow the expected schema",
-            tags=["all-images"],  
-            response_model=StandardSuccessResponseV1[InvalidAllImagesEntriesResponse],  
+            tags=[api_tag],
+            response_model=StandardSuccessResponseV1[AllImagesApiSchemas.InvalidEntriesResponse],  
             responses=ApiResponseHandlerV1.listErrors([404, 422, 500]))
 async def get_image_by_hash(request: Request):
     api_response_handler = await ApiResponseHandlerV1.createInstance(request)
@@ -122,8 +107,7 @@ async def get_image_by_hash(request: Request):
 
         # Return the found image data
         return api_response_handler.create_success_response_v1(
-            response_data=invalid_entries,
-            http_status_code=200  
+            response_data=invalid_entries
         )
     
     except Exception as e:
