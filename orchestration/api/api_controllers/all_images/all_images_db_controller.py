@@ -20,10 +20,8 @@ class AllImagesDbController(DatabaseCollectionControlletBase['AllImagesDbControl
     def _create_instance(cls):
         return AllImagesDbController(cls._creation_key)
     
-    _schema = AllImagesDbSchemas.validation_schema
-    
     def prepare(self, mongodb_db: Database) -> Collection:
-        self._internal_preparation(mongodb_db, "all-images")
+        self._internal_preparation(mongodb_db, "all-images", AllImagesDbSchemas.FullDatabaseSchema)
         self._set_top_properties(['image_path'])
 
         self.create_index_if_not_exists(
@@ -44,7 +42,6 @@ class AllImagesDbController(DatabaseCollectionControlletBase['AllImagesDbControl
             new_document = data.model_dump()
             new_document['uuid'] = Uuid64.from_formatted_string(data.uuid).to_mongo_value()
             new_document['index'] = -1
-            new_document['extra_value'] = -1
             self.collection.insert_one(new_document)
 
             print(f"Inserted new document into all-images collection: {new_document}")

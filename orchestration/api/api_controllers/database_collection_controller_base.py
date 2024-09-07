@@ -1,5 +1,6 @@
 from abc import abstractmethod
-from typing import Generic, List, TypeVar
+from typing import Generic, List, Optional, Type, TypeVar
+from pydantic import BaseModel
 from pymongo.collection import Collection
 from pymongo.database import Database
 from orchestration.api.utils.singleton_base import SingletonBase
@@ -18,9 +19,10 @@ class DatabaseCollectionControlletBase(SingletonBase[T], Generic[T]):
     
     __properties_sort_dict: dict = None
 
-    _schema: dict = None
+    #TODO: make read-only
+    _validation_schema: dict = None
 
-    def _internal_preparation(self, mongodb_db: Database, collection_name: str):
+    def _internal_preparation(self, mongodb_db: Database, collection_name: str, schema_class: Optional[Type[BaseModel]]):
         if self.collection != None:
             raise Exception("The all images collection has already been prepared")
         
@@ -34,9 +36,37 @@ class DatabaseCollectionControlletBase(SingletonBase[T], Generic[T]):
         
         self.__collection = mongodb_db[self.collection_name]
 
-        if self._schema:
-            if self.__collection.options().get("validator") != self._schema:
-                mongodb_db.command("collMod", self.collection_name, validator=self._schema)
+        self.__process_validation_schema(schema_class)
+
+        if self._validation_schema:
+            if self.__collection.options().get("validator") != self._validation_schema:
+                mongodb_db.command("collMod", self.collection_name, validator=self._validation_schema)
+    
+    def __process_validation_schema(self, schema_class: Optional[Type[BaseModel]]):
+        if schema_class != None:
+            self._validation_schema = schema_class.model_json_schema()
+
+            properties: dict = self._validation_schema.get('properties', {})
+            if properties == None:
+                raise Exception(f"Imposible to create the validation schema for the {self.collection_name} collection.")
+            
+            self._validation_schema.pop("title")
+            self._validation_schema.pop("type")
+            self._validation_schema["bsonType"] = "object"
+            
+            key: str
+            for key in properties:
+                p: dict = properties[key]
+                if p.get("bsonType", None) == None:
+                    raise Exception(f"Imposible to create the validation schema for the {self.collection_name} collection. You must define a 'bsonType' value for the '{p}' property.")
+                
+                title: str = p.get("title", None)
+                if title and title.upper() == key.replace('_', ' ').upper():
+                    p.pop("title")
+                
+                p.pop("type")
+
+            self._validation_schema = {"$jsonSchema": self._validation_schema}
 
     def create_index_if_not_exists(self, index_key, index_name: str):
         existing_indexes = self.collection.index_information()
@@ -78,7 +108,6 @@ class DatabaseCollectionControlletBase(SingletonBase[T], Generic[T]):
         dict_to_process.clear()
         for key in keys:
             dict_to_process[key] = new_dict[key]
-        #return new_dict
 
     def _get_property_sort_value(self, property_name: str):
         property_value = self.__properties_sort_dict.get(property_name)

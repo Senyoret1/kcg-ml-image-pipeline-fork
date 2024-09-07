@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, validate_call, validator
+from pydantic import BaseModel, ConfigDict, validate_call, validator
 
 correct_api_date_format = "%Y-%m-%dT%H:%M:%S"
 
@@ -13,6 +13,8 @@ class ElapsedTimeUnit(str, Enum):
     hours = "hours"
 
 class DateFilterParams(BaseModel):
+    model_config = ConfigDict(validate_assignment='True')
+
     initial_date: Optional[datetime]
     final_date: Optional[datetime]
 
@@ -22,15 +24,11 @@ class DateFilterParams(BaseModel):
             raise ValueError('DateFilterParams can only work with naive datetime objects')
         return v
 
-    class Config:
-        validate_assignment = True
-
 class ElapsedTimeFilterParams(BaseModel):
+    model_config = ConfigDict(validate_assignment='True')
+
     time_unit: ElapsedTimeUnit
     time: int
-
-    class Config:
-        validate_assignment = True
 
 @validate_call
 def create_date_filter_from_api_values(
