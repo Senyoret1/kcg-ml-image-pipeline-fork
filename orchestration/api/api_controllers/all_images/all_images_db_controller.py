@@ -12,6 +12,7 @@ import pymongo.database
 from orchestration.api.api_controllers.all_images.all_images_db_schemas import AllImagesDbSchemas
 from orchestration.api.api_controllers.database_collection_controller_base import DatabaseCollectionControlletBase
 from orchestration.api.utils.api_operations_utils import ApiUtils
+from orchestration.api.utils.database_operation_response import DatabaseOperationResponse
 from orchestration.api.utils.date_filter_objects import DateFilterParams, ElapsedTimeFilterParams, ElapsedTimeUnit
 from orchestration.api.utils.uuid64 import Uuid64
 
@@ -56,7 +57,7 @@ class AllImagesDbController(DatabaseCollectionControlletBase['AllImagesDbControl
         offset: int,
         sort_order: ApiUtils.SortOrder,
         date_filter: Optional[Union[DateFilterParams, ElapsedTimeFilterParams]]
-    ) -> list[AllImagesDbSchemas.DatabaseSchema]:
+    ) -> DatabaseOperationResponse[list[AllImagesDbSchemas.DatabaseSchema]]:
         try:
             query = {}
 
@@ -99,11 +100,13 @@ class AllImagesDbController(DatabaseCollectionControlletBase['AllImagesDbControl
 
             self._process_data_types(data)
 
-            return data
+            return DatabaseOperationResponse(response_content=data)
         except Exception as e:
             raise Exception(f"Error while getting a filtered images list from the all images collection: {e}")
         
-    def find_image_by_hash(self, image_hash: str, bucket_id: Optional[int] = None, values_to_get: Optional[dict] = None) -> AllImagesDbSchemas.DatabaseSchema:
+    def find_image_by_hash(
+        self, image_hash: str, bucket_id: Optional[int] = None, values_to_get: Optional[dict] = None
+    ) -> DatabaseOperationResponse[AllImagesDbSchemas.DatabaseSchema | None]:
         try:
             query = {"image_hash": image_hash}
             if bucket_id != None:
@@ -112,23 +115,23 @@ class AllImagesDbController(DatabaseCollectionControlletBase['AllImagesDbControl
             data = self.collection.find_one(query, values_to_get)
             self._process_data_types(data)
 
-            return data
+            return DatabaseOperationResponse(response_content=data)
         except Exception as e:
             raise Exception(f"Error while finding an image using the {image_hash} hash in database: {e}")
     
-    def find_images_with_invalid_schema(self) -> List[dict]:
+    def find_images_with_invalid_schema(self) -> DatabaseOperationResponse[List[dict]]:
         try:
-            query = { "$nor": [ self._schema ] }
+            query = { "$nor": [ self._validation_schema ] }
 
             data = self.collection.find(query)
             data = list(data)
             self._process_data_types(data)
 
-            return data
+            return DatabaseOperationResponse(response_content=data)
         except Exception as e:
             raise Exception(f"Error while finding invalid images in database: {e}")
         
-    def delete_images_by_hash(self, image_hash: str, bucket_id: Optional[int] = None) -> int:
+    def delete_images_by_hash(self, image_hash: str, bucket_id: Optional[int] = None) -> DatabaseOperationResponse[int]:
         try:
             query = {"image_hash": image_hash}
             if bucket_id:
@@ -136,7 +139,7 @@ class AllImagesDbController(DatabaseCollectionControlletBase['AllImagesDbControl
 
             result = self.collection.delete_many(query)
 
-            return result.deleted_count
+            return DatabaseOperationResponse(response_content=result.deleted_count)
         except Exception as e:
             raise Exception(f"Error while deleting images using the {image_hash} hash in database: {e}")
 

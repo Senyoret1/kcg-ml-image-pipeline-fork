@@ -5,7 +5,7 @@ from orchestration.api.api_controllers.all_images.all_images_db_schemas import A
 
 class AllImagesApiSchemas():
     class InvalidEntriesResponse(BaseModel):
-        List[dict]
+        entries: List[dict]
 
     class EntriesListResponse(BaseModel):
         images: List[AllImagesDbSchemas.DatabaseSchema]

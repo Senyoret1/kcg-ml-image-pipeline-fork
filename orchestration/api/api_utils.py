@@ -23,6 +23,7 @@ from urllib.parse import urlparse, parse_qs
 import random
 from minio.error import S3Error
 
+from orchestration.api.utils.database_operation_response import DatabaseOperationResponse, DatabaseOperationResponseType
 from orchestration.api.utils.uuid64 import Uuid64
 
 
@@ -399,6 +400,11 @@ class StandardErrorResponseV1(BaseStandardResponseV1):
 
      
 class ApiResponseHandlerV1:
+    default_database_http_statuses = {
+        DatabaseOperationResponseType.INTERNAL_ERROR: 500,
+        DatabaseOperationResponseType.NOT_ALLOWED: 422
+    }
+
     def __init__(self, request: Request, body_data: Optional[Dict[str, Any]] = None, _created_with_helper=False):
         self.request = request
         self.url = str(request.url)
@@ -510,6 +516,37 @@ class ApiResponseHandlerV1:
             
             return PrettyJSONResponse(status_code=http_status_code, content=response_content, headers=headers)
 
+    def process_normal_database_response(
+        self,
+        database_response: DatabaseOperationResponse,
+        success_http_status_code: int = 200,
+        headers: dict = {},
+    ):
+        if (database_response.response_type == DatabaseOperationResponseType.SUCCESS):
+            return self.create_success_response_v1(database_response.response_content, success_http_status_code, headers)
+        else:
+            http_code = self.default_database_http_statuses.get(database_response.response_type)
+            http_code = http_code if http_code != None else 500
+            # TODO: We need a specific code for this.
+            return self.create_error_response_v1(ErrorCode.OTHER_ERROR, database_response.error_description, http_code, headers)
+        
+    def process_deletion_database_response(
+        self,
+        database_response: DatabaseOperationResponse[int],
+        deleting_single_element: bool,
+        success_http_status_code: int = 200,
+        headers: dict = {},
+    ):
+        if (database_response.response_type == DatabaseOperationResponseType.SUCCESS):
+            if deleting_single_element:
+                return self.create_success_delete_response_v1(database_response.response_content > 0, success_http_status_code, headers)
+            else:
+                raise NotImplementedError("Standard response for multiple deletions not implemented yet.")
+        else:
+            http_code = self.default_database_http_statuses.get(database_response.response_type)
+            http_code = http_code if http_code != None else 500
+            # TODO: We need a specific code for this.
+            return self.create_error_response_v1(ErrorCode.OTHER_ERROR, database_response.error_description, http_code, headers)
             
 
 def find_or_create_next_folder_and_index(client: Minio, bucket: str, base_folder: str) -> (str, int):
@@ -835,7 +872,8 @@ def remove_from_additional_collections(request, image_hash, bucket_id, image_sou
         ])
 
     print(f"Removing documents with image_hash: {image_hash} from {AllImagesDbController.get_instance().collection_name}")
-    amount_removed = AllImagesDbController.get_instance().delete_images_by_hash(image_hash, bucket_id)
+    db_response = AllImagesDbController.get_instance().delete_images_by_hash(image_hash, bucket_id)
+    amount_removed = db_response.response_content if db_response.response_type == DatabaseOperationResponseType.SUCCESS else 0
     print(f"Deleted {amount_removed} documents from {AllImagesDbController.get_instance().collection_name}")
 
     for collection in collections_to_remove:

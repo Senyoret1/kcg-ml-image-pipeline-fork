@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from orchestration.api.api_controllers.all_images.all_images_db_controller import AllImagesDbController
 from orchestration.api.api_controllers.all_images.all_images_db_schemas import AllImagesDbSchemas
+from orchestration.api.utils.kgc_requests_middleware import KgcRequestsMiddleware
 from .api_utils import ApiResponseHandlerV1, PrettyJSONResponse, ApiResponseHandler, ErrorCode,  StandardErrorResponseV1, StandardSuccessResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi import status, Request
@@ -55,6 +56,10 @@ from utility.minio import cmd
 
 config = dotenv_values("./orchestration/api/.env")
 app = FastAPI(title="Orchestration API")
+
+@app.middleware("http")
+async def requests_middleware(request: Request, call_next):
+    return await KgcRequestsMiddleware.process_requests(request, call_next)
 
 app.add_middleware(
     CORSMiddleware,

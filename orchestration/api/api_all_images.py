@@ -29,33 +29,25 @@ async def list_all_images(
     time_interval: Optional[int] = Query(None, description="If set, only entries this old or newer will be returned. Use time_unit to se the time unit"),
     time_unit: Optional[ElapsedTimeUnit] = Query(None, description="If the value of 'time_interval' is in minutes or seconds")
 ):
-    response_handler = await ApiResponseHandlerV1.createInstance(request)
+
+    date_filter = None
     try:
-        date_filter = None
-        try:
-            date_filter = create_date_filter_from_api_values(start_date, end_date, time_interval, time_unit)
-        except Exception as e:
-            return response_handler.create_error_response_v1(
-                error_code=ErrorCode.INVALID_PARAMS,
-                error_string=str(e),
-                http_status_code=422
-            )
-
-        images = AllImagesDbController.get_instance().list_images_with_filtering_and_pagination(
-            bucket_ids, dataset_ids, limit, offset, order, date_filter
-        )
-
-        return response_handler.create_success_response_v1(
-            response_data={"images": images}
-        )
-
+        date_filter = create_date_filter_from_api_values(start_date, end_date, time_interval, time_unit)
     except Exception as e:
-        print(f"Exception: {e}")
-        return response_handler.create_error_response_v1(
-            error_code=ErrorCode.OTHER_ERROR,
+        return request.state.response_handler.create_error_response_v1(
+            error_code=ErrorCode.INVALID_PARAMS,
             error_string=str(e),
-            http_status_code=500
+            http_status_code=422
         )
+
+    db_response = AllImagesDbController.get_instance().list_images_with_filtering_and_pagination(
+        bucket_ids, dataset_ids, limit, offset, order, date_filter
+    )
+
+    db_response.response_content = {"images": db_response.response_content}
+    return request.state.response_handler.process_normal_database_response(
+        db_response
+    )
     
 
 @router.get("/all-images/get-image-by-hash", 
@@ -68,30 +60,20 @@ async def get_image_by_hash(
     image_hash: str,
     bucket_id: int = Query(None, description="If set, only images from this bucket will be considered. This may be useful if the same image is in more than one bucket"),
 ):
-    api_response_handler = await ApiResponseHandlerV1.createInstance(request)
+    # Find the image in the all-images collection by its hash
+    db_response = AllImagesDbController.get_instance().find_image_by_hash(image_hash, bucket_id)
     
-    try:
-        # Find the image in the all-images collection by its hash
-        image_data = AllImagesDbController.get_instance().find_image_by_hash(image_hash, bucket_id)
-        
-        if image_data is None:
-            return api_response_handler.create_error_response_v1(
-                error_code=ErrorCode.ELEMENT_NOT_FOUND, 
-                error_string="Image with this hash does not exist in the all-images collection",
-                http_status_code=404
-            )
+    if db_response.response_content is None:
+        return request.state.api_response_handler.create_error_response_v1(
+            error_code=ErrorCode.ELEMENT_NOT_FOUND, 
+            error_string="Image with this hash does not exist in the all-images collection",
+            http_status_code=404
+        )
 
-        # Return the found image data
-        return api_response_handler.create_success_response_v1(
-            response_data=image_data
-        )
-    
-    except Exception as e:
-        return api_response_handler.create_error_response_v1(
-            error_code=ErrorCode.OTHER_ERROR, 
-            error_string=str(e),
-            http_status_code=500
-        )
+    # Return the found image data
+    return request.state.response_handler.process_normal_database_response(
+        db_response
+    )
 
 @router.get("/all-images/get-invalid-database-entries", 
             description="Gets all the entries in the database that don't follow the expected schema",
@@ -99,20 +81,10 @@ async def get_image_by_hash(
             response_model=StandardSuccessResponseV1[AllImagesApiSchemas.InvalidEntriesResponse],  
             responses=ApiResponseHandlerV1.listErrors([404, 422, 500]))
 async def get_image_by_hash(request: Request):
-    api_response_handler = await ApiResponseHandlerV1.createInstance(request)
-    
-    try:
-        # Find the image in the all-images collection by its hash
-        invalid_entries = AllImagesDbController.get_instance().find_images_with_invalid_schema()
+    # Find the image in the all-images collection by its hash
+    db_response = AllImagesDbController.get_instance().find_images_with_invalid_schema()
 
-        # Return the found image data
-        return api_response_handler.create_success_response_v1(
-            response_data=invalid_entries
-        )
-    
-    except Exception as e:
-        return api_response_handler.create_error_response_v1(
-            error_code=ErrorCode.OTHER_ERROR, 
-            error_string=str(e),
-            http_status_code=500
-        )
+    db_response.response_content = {"entries": db_response.response_content}
+    return request.state.response_handler.process_normal_database_response(
+        db_response
+    )

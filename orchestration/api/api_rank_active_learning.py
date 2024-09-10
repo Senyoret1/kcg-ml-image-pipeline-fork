@@ -3,6 +3,7 @@ from fastapi import Request, HTTPException, APIRouter, Response, Query, status
 from datetime import datetime, timedelta
 import pymongo 
 from orchestration.api.api_controllers.all_images.all_images_db_controller import AllImagesDbController
+from orchestration.api.utils.database_operation_response import DatabaseOperationResponseType
 from utility.minio import cmd
 from orchestration.api.mongo_schema.active_learning_schemas import RankSelection, ListResponseRankSelection, ResponseRankSelection, FlaggedResponse, JsonMinioResponse, RankSelectionV1
 from .api_utils import ApiResponseHandlerV1, ErrorCode, StandardSuccessResponseV1, StandardErrorResponseV1, WasPresentResponse, CountResponse, IrrelevantResponse, ListIrrelevantResponse, BoolIrrelevantResponse, ListGenerationsCountPerDayResponse, IrrelevantResponseV1
@@ -430,16 +431,16 @@ async def add_datapoints(request: Request, selection: RankSelection, image_sourc
         # Get image_uuid for image_1_metadata
         image_1_hash = dict_data['image_1_metadata']['file_hash']
         image_1_uuid = AllImagesDbController.get_instance().find_image_by_hash(image_1_hash, get_bucket_id(image_source), {"uuid": 1})
-        if image_1_uuid:
-            dict_data['image_1_metadata']['image_uuid'] = image_1_uuid['uuid']
+        if image_1_uuid.response_type == DatabaseOperationResponseType.SUCCESS and image_1_uuid.response_content:
+            dict_data['image_1_metadata']['image_uuid'] = image_1_uuid.response_content['uuid']
         else:
             print(f"Image UUID not found for image_1_metadata with hash: {image_1_hash}")
 
         # Get image_uuid for image_2_metadata
         image_2_hash = dict_data['image_2_metadata']['file_hash']
         image_2_uuid = AllImagesDbController.get_instance().find_image_by_hash(image_2_hash, get_bucket_id(image_source), {"uuid": 1})
-        if image_2_uuid:
-            dict_data['image_2_metadata']['image_uuid'] = image_2_uuid['uuid']
+        if image_2_uuid.response_type == DatabaseOperationResponseType.SUCCESS and image_2_uuid.response_content:
+            dict_data['image_2_metadata']['image_uuid'] = image_2_uuid.response_content['uuid']
         else:
             print(f"Image UUID not found for image_2_metadata with hash: {image_2_hash}")
 
@@ -499,7 +500,7 @@ async def add_datapoints(request: Request, selection: RankSelection, image_sourc
              responses=ApiResponseHandlerV1.listErrors([404, 422, 500]))
 async def add_datapoints_v1(request: Request, selection: RankSelectionV1):
     api_handler = await ApiResponseHandlerV1.createInstance(request)
-    
+
     try:
         valid_image_sources = {"generated_image", "extract_image", "external_image"}
         
@@ -543,8 +544,8 @@ async def add_datapoints_v1(request: Request, selection: RankSelectionV1):
         image_1_hash = dict_data['image_1_metadata']['file_hash']
         image_1_source = dict_data['image_1_metadata']['image_source']
         image_1_uuid = AllImagesDbController.get_instance().find_image_by_hash(image_1_hash, get_bucket_id(image_1_source), {"uuid": 1})
-        if image_1_uuid:
-            dict_data['image_1_metadata']['image_uuid'] = image_1_uuid['uuid']
+        if image_1_uuid.response_type == DatabaseOperationResponseType.SUCCESS and image_1_uuid.response_content:
+            dict_data['image_1_metadata']['image_uuid'] = image_1_uuid.response_content['uuid']
         else:
             print(f"Image UUID not found for image_1_metadata with hash: {image_1_hash} and source: {image_1_source}")
 
@@ -552,8 +553,8 @@ async def add_datapoints_v1(request: Request, selection: RankSelectionV1):
         image_2_hash = dict_data['image_2_metadata']['file_hash']
         image_2_source = dict_data['image_2_metadata']['image_source']
         image_2_uuid = AllImagesDbController.get_instance().find_image_by_hash(image_2_hash, get_bucket_id(image_2_source), {"uuid": 1})
-        if image_2_uuid:
-            dict_data['image_2_metadata']['image_uuid'] = image_2_uuid['uuid']
+        if image_2_uuid.response_type == DatabaseOperationResponseType.SUCCESS and image_2_uuid.response_content:
+            dict_data['image_2_metadata']['image_uuid'] = image_2_uuid.response_content['uuid']
         else:
             print(f"Image UUID not found for image_2_metadata with hash: {image_2_hash} and source: {image_2_source}")
 
