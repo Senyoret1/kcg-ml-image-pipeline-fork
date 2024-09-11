@@ -64,12 +64,6 @@ async def set_image_rank_score(request: Request, ranking_score: RankingScore):
              tags=["image scores"],  
              response_model=StandardSuccessResponseV1[ResponseRankingScore],
              responses=ApiResponseHandlerV1.listErrors([400, 422])) 
-@router.post("/score/set-rank-score", 
-             status_code=201,
-             description="deprecated: use /image-scores/scores/set-rank-score",
-             tags=["deprecated2"],  
-             response_model=StandardSuccessResponseV1[RankingScore],
-             responses=ApiResponseHandlerV1.listErrors([400, 422])) 
 async def set_image_rank_score(
     request: Request, 
     ranking_score: RankingScore, 
@@ -341,12 +335,6 @@ async def set_image_rank_score_batch(
             tags=["image scores"],  
             response_model=StandardSuccessResponseV1[ResponseRankingScore],  
             responses=ApiResponseHandlerV1.listErrors([400,422]))
-@router.get("/score/image-rank-score-by-hash", 
-            description="deprectaed: use /image-scores/scores/get-image-rank-score ",
-            status_code=200,
-            tags=["deprecated2"],  
-            response_model=StandardSuccessResponseV1[RankingScore],  
-            responses=ApiResponseHandlerV1.listErrors([400,422]))
 def get_image_rank_score_by_hash(
     request: Request, 
     image_hash: str = Query(..., description="The hash of the image to get score for"), 
@@ -553,12 +541,6 @@ async def get_image_rank_scores(
                description="Delete image rank score by specific hash.",
                status_code=200,
                tags=["image scores"], 
-               response_model=StandardSuccessResponseV1[WasPresentResponse],
-               responses=ApiResponseHandlerV1.listErrors([422]))
-@router.delete("/score/image-rank-score-by-hash", 
-               description="deprecated: use /image-scores/scores/delete-image-rank-score",
-               status_code=200,
-               tags=["deprecated2"], 
                response_model=StandardSuccessResponseV1[WasPresentResponse],
                responses=ApiResponseHandlerV1.listErrors([422]))
 def delete_image_rank_score_by_hash(

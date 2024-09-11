@@ -68,32 +68,6 @@ def add_selection_datapoint(
     return True
 
 
-@router.post("/rank/update-image-rank-use-count",tags = ["deprecated2"], description="Update image rank use count")
-def update_image_rank_use_count(request: Request, image_hash):
-    counter = request.app.image_rank_use_count_collection.find_one({"image_hash": image_hash})
-
-    if counter is None:
-        # add
-        count = 1
-        rank_use_count_data = {"image_hash": image_hash,
-                               "count": count,
-                               }
-
-        request.app.image_rank_use_count_collection.insert_one(rank_use_count_data)
-    else:
-        count = counter["count"]
-        count += 1
-
-        try:
-            request.app.image_rank_use_count_collection.update_one(
-                {"image_hash": image_hash},
-                {"$set": {"count": count}})
-        except Exception as e:
-            raise Exception("Updating of model counter failed: {}".format(e))
-
-    return True
-
-
 @router.post("/rank/set-image-rank-use-count", tags = ['deprecated3'], description= "changed with /rank/set-image-rank-use-count-v1")
 def set_image_rank_use_count(request: Request, image_hash, count: int):
     counter = request.app.image_rank_use_count_collection.find_one({"image_hash": image_hash})
@@ -127,26 +101,6 @@ def get_image_rank_use_count(request: Request, image_hash: str):
 
     return item["count"]
 
-
-@router.post("/ranking/submit-relevance-data", tags= ["deprecated2"])
-def add_relevancy_selection_datapoint(request: Request, relevance_selection: RelevanceSelection, dataset: str = Query(...)):
-    time = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-    relevance_selection.datetime = time
-
-    # prepare path
-    file_name = "{}-{}.json".format(time, relevance_selection.username)
-    path = "data/relevancy/aggregate"
-    full_path = os.path.join(dataset, path, file_name)
-
-    # convert to bytes
-    dict_data = relevance_selection.to_dict()
-    json_data = json.dumps(dict_data, indent=4).encode('utf-8')
-    data = BytesIO(json_data)
-
-    # upload
-    cmd.upload_data(request.app.minio_client, "datasets", full_path, data)
-
-    return True
 
 @router.post("/rank/submit-relevance-data-v1",
              tags=['ranking'],
@@ -187,44 +141,6 @@ def add_relevancy_selection_datapoint_v1(request: Request, relevance_selection: 
         )
 
 
-@router.get("/rank/list-ranking-data", tags = ["deprecated2"], response_class=PrettyJSONResponse)
-def list_ranking_data(
-    request: Request,
-    start_date: str = Query(None),
-    end_date: str = Query(None),
-    skip: int = Query(0, alias="offset"),
-    limit: int = Query(10, alias="limit"),
-    order: str = Query("desc", regex="^(desc|asc)$")
-):
-    # Convert start_date and end_date strings to datetime objects, if provided
-    start_date_obj = datetime.strptime(start_date, "%Y-%m-%d") if start_date else None
-    end_date_obj = datetime.strptime(end_date, "%Y-%m-%d") if end_date else None
-
-    # Build the query filter based on dates
-    query_filter = {}
-    if start_date_obj or end_date_obj:
-        date_filter = {}
-        if start_date_obj:
-            date_filter["$gte"] = start_date_obj.strftime("%Y-%m-%d")
-        if end_date_obj:
-            date_filter["$lte"] = end_date_obj.strftime("%Y-%m-%d")
-        query_filter["file_name"] = date_filter
-
-    # Fetch data from MongoDB with pagination and ordering
-    cursor = request.app.image_pair_ranking_collection.find(query_filter).sort("file_name", -1 if order == "desc" else 1).skip(skip).limit(limit)
-
-    # Convert cursor to list of dictionaries
-    try:
-        ranking_data = []
-        for doc in cursor:
-            doc['_id'] = str(doc['_id'])  # Convert ObjectId to string
-            ranking_data.append(doc)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-    return ranking_data
-
-
 @router.get("/rank/sort-ranking-data-by-residual", tags = ['deprecated3'], description= "changed with /rank/sort-ranking-data-by-residual-v1")
 def list_ranking_data(
     request: Request,
@@ -258,51 +174,6 @@ def list_ranking_data(
     # Fetch data from MongoDB with pagination and sorting by residual value
     cursor = request.app.image_pair_ranking_collection.find(query_filter).sort(
         f"selected_residual.{model_type}", sort_order).skip(skip).limit(limit)
-
-    # Convert cursor to list of dictionaries
-    try:
-        ranking_data = []
-        for doc in cursor:
-            doc['_id'] = str(doc['_id'])  # Convert ObjectId to string
-            ranking_data.append(doc)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-    return ranking_data
-
-@router.get("/rank/sort-ranking-data-by-date", tags = ["deprecated2"], response_class=PrettyJSONResponse)
-def list_ranking_data(
-    request: Request,
-    model_type: str = Query(..., description="Model type to filter by, e.g., 'linear' or 'elm-v1'"),
-    dataset: Optional[str] = Query(None, description="Dataset to filter by"),
-    start_date: str = Query(None),
-    end_date: str = Query(None),
-    skip: int = Query(0, alias="offset"),
-    limit: int = Query(10, alias="limit"),
-    order: str = Query("desc", regex="^(desc|asc)$")
-):
-    # Convert start_date and end_date strings to datetime objects, if provided
-    start_date_obj = datetime.strptime(start_date, "%Y-%m-%d") if start_date else None
-    end_date_obj = datetime.strptime(end_date, "%Y-%m-%d") if end_date else None
-
-    # Build the query filter based on dates, model_type, and dataset
-    query_filter = {"selected_residual.{}".format(model_type): {"$exists": True}}
-    if dataset:
-        query_filter["dataset"] = dataset
-    if start_date_obj or end_date_obj:
-        date_filter = {}
-        if start_date_obj:
-            date_filter["$gte"] = start_date_obj.strftime("%Y-%m-%d")
-        if end_date_obj:
-            date_filter["$lte"] = end_date_obj.strftime("%Y-%m-%d")
-        query_filter["file_name"] = date_filter
-
-    # Determine the sort order
-    sort_order = -1 if order == "desc" else 1
-
-    # Fetch data from MongoDB with pagination and sorting by date
-    cursor = request.app.image_pair_ranking_collection.find(query_filter).sort(
-        "file_name", sort_order).skip(skip).limit(limit)
 
     # Convert cursor to list of dictionaries
     try:
@@ -890,60 +761,6 @@ async def add_relevancy_selection_datapoint_v1(request: Request, relevance_selec
         )
 
     
-
-@router.get("/rank/list-ranking-data-v1", 
-            status_code=200,
-            tags=["deprecated2"],
-            response_model=StandardSuccessResponseV1[Selection],  
-            responses=ApiResponseHandlerV1.listErrors([400, 422, 500]))
-def list_ranking_data_v1(
-    request: Request,
-    dataset: str = Query(None),
-    start_date: str = Query(None),
-    end_date: str = Query(None),
-    skip: int = Query(0, alias="offset"),
-    limit: int = Query(10, alias="limit"),
-    order: str = Query("desc", regex="^(desc|asc)$")
-):
-    response_handler = ApiResponseHandlerV1(request)
-    try:
-        # Convert start_date and end_date strings to datetime objects, if provided
-        start_date_obj = datetime.strptime(start_date, "%Y-%m-%d") if start_date else None
-        end_date_obj = datetime.strptime(end_date, "%Y-%m-%d") if end_date else None
-
-        # Build the query filter based on dates
-        query_filter = {}
-        if start_date_obj or end_date_obj:
-            date_filter = {}
-            if start_date_obj:
-                date_filter["$gte"] = start_date_obj
-            if end_date_obj:
-                date_filter["$lte"] = end_date_obj
-            query_filter["datetime"] = date_filter  # Assuming the field in the database is "datetime"
-
-        if dataset:
-            query_filter["dataset"] = dataset
-
-        # Fetch data from MongoDB with pagination and ordering
-        cursor = request.app.image_pair_ranking_collection.find(query_filter).sort("datetime", -1 if order == "desc" else 1).skip(skip).limit(limit)
-
-        ranking_data = list(cursor)
-        for doc in ranking_data:
-            doc['_id'] = str(doc['_id'])  # Convert ObjectId to string
-
-        # Return the fetched data with a success response
-        return response_handler.create_success_response_v1(
-            response_data=ranking_data, 
-            http_status_code=200,
-        )
-    except Exception as e:
-        # Log the exception and return an error response
-        return response_handler.create_error_response_v1(
-            error_code=ErrorCode.OTHER_ERROR,
-            error_string="Internal Server Error",
-            http_status_code=500,
-        )
-    
 @router.get("/rank/sort-ranking-data-by-residual-v1", 
             description="rank data by residual",
             tags=["ranking"],
@@ -1056,65 +873,6 @@ async def sort_ranking_data_by_date_v2(
             error_code=ErrorCode.OTHER_ERROR,
             error_string=f"Internal Server Error: {str(e)}",
             http_status_code=500
-        )    
-
-@router.get("/rank/sort-ranking-data-by-date-v1", 
-            description="list ranking data by date",
-            tags=["deprecated2"],
-            response_model=StandardSuccessResponseV1[List[Selection]],  
-            responses=ApiResponseHandlerV1.listErrors([400, 422, 500]))
-def list_ranking_data_by_date(
-    request: Request,
-    model_type: str = Query(..., description="Model type to filter by, e.g., 'linear' or 'elm-v1'"),
-    dataset: Optional[str] = Query(None, description="Dataset to filter by"),
-    start_date: str = Query(None),
-    end_date: str = Query(None),
-    skip: int = Query(0, alias="offset"),
-    limit: int = Query(10, alias="limit"),
-    order: str = Query("desc", regex="^(desc|asc)$")
-):
-    response_handler = ApiResponseHandlerV1(request)
-    try:
-        # Convert start_date and end_date strings to datetime objects, if provided
-        start_date_obj = datetime.strptime(start_date, "%Y-%m-%d") if start_date else None
-        end_date_obj = datetime.strptime(end_date, "%Y-%m-%d") if end_date else None
-
-        # Build the query filter based on dates, model_type, and dataset
-        query_filter = {"selected_residual.{}".format(model_type): {"$exists": True}}
-        if dataset:
-            query_filter["dataset"] = dataset
-        if start_date_obj or end_date_obj:
-            date_filter = {}
-            if start_date_obj:
-                date_filter["$gte"] = start_date_obj.strftime("%Y-%m-%d")
-            if end_date_obj:
-                date_filter["$lte"] = end_date_obj.strftime("%Y-%m-%d")
-            query_filter["file_name"] = date_filter
-
-        # Determine the sort order
-        sort_order = -1 if order == "desc" else 1
-
-        # Fetch and sort data from MongoDB with pagination
-        cursor = request.app.image_pair_ranking_collection.find(query_filter).sort(
-            "file_name", sort_order).skip(skip).limit(limit)  # Assuming the field is "datetime"
-
-        # Convert cursor to list of dictionaries
-        ranking_data = list(cursor)
-        for doc in ranking_data:
-            doc['_id'] = str(doc['_id'])  # Convert ObjectId to string
-
-        # Return the fetched data with a success response
-        return response_handler.create_success_response_v1(
-            response_data=ranking_data, 
-            http_status_code=200,
-        )
-    except Exception as e:
-        # Handle exceptions and return an error response
-        print(f"Exception occurred: {e}")  # For debugging
-        return response_handler.create_error_response_v1(
-            error_code=ErrorCode.OTHER_ERROR,
-            error_string=str(e),
-            http_status_code=500,
         )    
     
 
@@ -1268,25 +1026,6 @@ def add_selected_residual_pair(
             http_status_code=500,
         )
 
-@router.get("/rank/read",tags = ['deprecated2'], response_class=PrettyJSONResponse)
-def read_ranking_file(request: Request, dataset: str,
-                      filename: str = Query(..., description="Filename of the JSON to read")):
-    # Construct the object name for ranking
-    object_name = f"{dataset}/data/ranking/aggregate/{filename}"
-
-    # Fetch the content of the specified JSON file
-    data = cmd.get_file_from_minio(request.app.minio_client, "datasets", object_name)
-
-    if data is None:
-        raise HTTPException(status_code=410, detail=f"File {filename} not found.")
-
-    file_content = ""
-    for chunk in data.stream(32 * 1024):
-        file_content += chunk.decode('utf-8')
-
-    # Return the content of the JSON file
-    return json.loads(file_content)
-
 @router.get("/rank/read-ranking-datapoint", 
             tags=['ranking'], 
             description = "read ranking datapoints",
@@ -1325,26 +1064,6 @@ async def read_ranking_file(request: Request, dataset: str, filename: str = Quer
             http_status_code=500,
         )
 
-
-
-@router.get("/relevancy/read", tags = ['deprecated2'], response_class=PrettyJSONResponse)
-def read_relevancy_file(request: Request, dataset: str,
-                        filename: str = Query(..., description="Filename of the JSON to read")):
-    # Construct the object name for relevancy
-    object_name = f"{dataset}/data/relevancy/aggregate/{filename}"
-
-    # Fetch the content of the specified JSON file
-    data = cmd.get_file_from_minio(request.app.minio_client, "datasets", object_name)
-
-    if data is None:
-        raise HTTPException(status_code=410, detail=f"File {filename} not found.")
-
-    file_content = ""
-    for chunk in data.stream(32 * 1024):
-        file_content += chunk.decode('utf-8')
-
-    # Return the content of the JSON file
-    return json.loads(file_content)
 
 @router.get("/rank/read-relevance-datapoint", 
             tags=['ranking'],

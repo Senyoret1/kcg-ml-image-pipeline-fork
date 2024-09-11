@@ -76,12 +76,6 @@ def delete_image_rank_percentiles_by_model_id(request: Request, model_id: int):
              response_model=StandardSuccessResponseV1[RankingPercentile],
              tags=["image scores"],
              responses=ApiResponseHandlerV1.listErrors([400, 422, 500]))
-@router.post("/percentile/image-rank-percentile",
-             status_code=201,
-             description="deprecated: use /image-scores/percentiles/set-image-rank-percentile ",
-             response_model=StandardSuccessResponseV1[RankingPercentile],
-             tags=["deprecated2"],
-             responses=ApiResponseHandlerV1.listErrors([400, 422, 500]))
 def set_image_rank_percentile(request: Request, ranking_percentile: RankingPercentile):
     response_handler = ApiResponseHandlerV1(request)
     try:
@@ -108,12 +102,6 @@ def set_image_rank_percentile(request: Request, ranking_percentile: RankingPerce
              response_model=StandardSuccessResponseV1[RankingPercentile],
              tags=["image scores"],
              responses=ApiResponseHandlerV1.listErrors([400, 422, 500]))
-@router.get("/percentile/image-rank-percentile-by-hash",
-             status_code=200,
-             description="deprecated: use /image-scores/percentiles/get-image-rank-percentile ",
-             response_model=StandardSuccessResponseV1[RankingPercentile],
-             tags=["deprecated2"],
-             responses=ApiResponseHandlerV1.listErrors([400, 422, 500]))
 def get_image_rank_percentile_by_hash(request: Request, image_hash: str, model_id: int):
     response_handler = ApiResponseHandlerV1(request)
     try:
@@ -136,11 +124,6 @@ def get_image_rank_percentile_by_hash(request: Request, image_hash: str, model_i
             response_model=StandardSuccessResponseV1[ResponseRankingPercentile],
             tags=["image scores"],
             description="Get image rank percentiles by model id. Returns as descending order of percentiles",
-            responses=ApiResponseHandlerV1.listErrors([422, 500]))
-@router.get("/percentile/image-rank-percentiles-by-model-id",
-            response_model=StandardSuccessResponseV1[ResponseRankingPercentile],
-            tags=["deprecated2"],
-            description="deprecated: use /image-scores/percentiles/list-image-rank-percentiles-by-model-id ",
             responses=ApiResponseHandlerV1.listErrors([422, 500]))
 def get_image_rank_percentiles_by_model_id(request: Request, model_id: int):
     api_response_handler = ApiResponseHandlerV1(request)

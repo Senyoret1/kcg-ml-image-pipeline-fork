@@ -11,67 +11,6 @@ router = APIRouter()
 CACHE = {}
 CACHE_EXPIRATION_DELTA = timedelta(hours=12)
 
-@router.get("/tasks/attributes", 
-         tags = ["deprecated2"],
-         responses=ApiResponseHandler.listErrors([404, 500]),
-         description="List unique score types from task_attributes_dict")
-def list_task_attributes(request: Request, dataset: str = Query(..., description="Dataset to filter tasks")):
-    api_handler = ApiResponseHandler(request)
-    try:
-        # Check if data is in cache and not expired
-        cache_key = f"task_attributes_{dataset}"
-        if cache_key in CACHE and datetime.now() - CACHE[cache_key]['timestamp'] < CACHE_EXPIRATION_DELTA:
-            return api_handler.create_success_response(CACHE[cache_key]['data'], 200)
-
-        # Fetch data from the database for the specified dataset
-        tasks_cursor = request.app.completed_jobs_collection.find(
-            {"task_input_dict.dataset": dataset, "task_attributes_dict": {"$exists": True, "$ne": {}}},
-            {'task_attributes_dict': 1}
-        )
-
-        # Use a set for score field names and a list for model names
-        score_fields = set()
-        model_names = []
-
-        # Iterate through cursor and add unique score field names and model names
-        for task in tasks_cursor:
-            task_attr_dict = task.get('task_attributes_dict', {})
-            if isinstance(task_attr_dict, dict):  # Check if task_attr_dict is a dictionary
-                for model, scores in task_attr_dict.items():
-                    if model not in model_names:
-                        model_names.append(model)
-                    score_fields.update(scores.keys())
-
-        # Convert set to a list to make it JSON serializable
-        score_fields_list = list(score_fields)
-
-        # Store data in cache with timestamp
-        CACHE[cache_key] = {
-            'timestamp': datetime.now(),
-            'data': {
-                "Models": model_names,
-                "Scores": score_fields_list
-            }
-        }
-
-        # Return success response
-        return api_handler.create_success_response({
-            "Models": model_names,
-            "Scores": score_fields_list
-        }, 200)
-
-    except Exception as exc:
-        print(f"Exception occurred: {exc}")
-        return api_handler.create_error_response(
-            ErrorCode.OTHER_ERROR,
-            "Internal Server Error",
-            500
-        )
-
-
-
-
-
 @router.get("/image_by_rank/image-list-sorted-by-score", response_class=PrettyJSONResponse, tags = ['deprecated3'], description= "changed wtih /image-by-rank/image-list-sorted-by-score-v1")
 def image_list_sorted_by_score(
     request: Request,
@@ -451,65 +390,6 @@ def image_list_sorted_by_residual(
 
 
 # new apis
-
-@router.get("/tasks/attributes-v1", 
-         tags = ["deprecated2"],
-         response_model=StandardSuccessResponseV1[ModelsAndScoresResponse],
-         responses=ApiResponseHandlerV1.listErrors([404, 500]),
-         description="List unique score types from task_attributes_dict")
-def list_task_attributes_v1(request: Request, dataset: str = Query(..., description="Dataset to filter tasks")):
-    api_handler = ApiResponseHandlerV1(request)
-    try:
-        # Check if data is in cache and not expired
-        cache_key = f"task_attributes_{dataset}"
-        if cache_key in CACHE and datetime.now() - CACHE[cache_key]['timestamp'] < CACHE_EXPIRATION_DELTA:
-            return api_handler.create_success_response_v1(response_data=CACHE[cache_key]['data'], http_status_code=200)
-
-        # Fetch data from the database for the specified dataset
-        tasks_cursor = request.app.completed_jobs_collection.find(
-            {"task_input_dict.dataset": dataset, "task_attributes_dict": {"$exists": True, "$ne": {}}},
-            {'task_attributes_dict': 1}
-        )
-
-        # Use a set for score field names and a list for model names
-        score_fields = set()
-        model_names = []
-
-        # Iterate through cursor and add unique score field names and model names
-        for task in tasks_cursor:
-            task_attr_dict = task.get('task_attributes_dict', {})
-            if isinstance(task_attr_dict, dict):  # Check if task_attr_dict is a dictionary
-                for model, scores in task_attr_dict.items():
-                    if model not in model_names:
-                        model_names.append(model)
-                    score_fields.update(scores.keys())
-
-        # Convert set to a list to make it JSON serializable
-        score_fields_list = list(score_fields)
-
-        # Store data in cache with timestamp
-        CACHE[cache_key] = {
-            'timestamp': datetime.now(),
-            'data': {
-                "Models": model_names,
-                "Scores": score_fields_list
-            }
-        }
-
-        # Return success response
-        return api_handler.create_success_response_v1(response_data={
-            "Models": model_names,
-            "Scores": score_fields_list
-        }, http_status_code=200)
-
-    except Exception as exc:
-        print(f"Exception occurred: {exc}")
-        return api_handler.create_error_response_v1(
-            error_code=ErrorCode.OTHER_ERROR,
-            error_string="Internal Server Error",
-            http_status_code=500
-        )
-
 
 @router.get("/image-by-rank/image-list-sorted-by-score-v1",
             tags= ['images by rank'],

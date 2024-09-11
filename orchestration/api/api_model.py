@@ -434,33 +434,6 @@ def get_latest_ranking_model_v1(request: Request,
         )        
     
 
-@router.post("/models/add-v1",
-             response_model=StandardSuccessResponseV1[ModelIdResponse], 
-             description="Add a model to model collection",
-             tags=["deprecated2"],
-             status_code=200,
-             responses=ApiResponseHandlerV1.listErrors([400, 500]))
-async def add_model(request: Request, model: RankingModel):
-    response_handler = await ApiResponseHandlerV1.createInstance(request)
-    try:
-        query = {"model_file_hash": model.model_file_hash}
-        item = request.app.models_collection.find_one(query)
-        if item is None:
-            # add one
-            model.model_id = get_next_model_id_sequence(request)
-            request.app.models_collection.insert_one(model.to_dict())
-            model_id = model.model_id
-        else:
-            model_id = item["model_id"]
-
-        return response_handler.create_success_response_v1(response_data={"model_id": model_id}, http_status_code=200)
-    except Exception as e:
-        return response_handler.create_error_response_v1(
-            error_code=ErrorCode.OTHER_ERROR,
-            error_string=str(e),
-            http_status_code=500,
-        )    
-
 @router.post("/models/add-model",
              response_model=StandardSuccessResponseV1[ModelIdResponse], 
              description="Add a model to model collection",
@@ -547,40 +520,6 @@ async def get_latest_graph(request: Request, dataset: str = Query(...), model_ty
             error_string=str(e),
             http_status_code=500,
         )
-
-@router.get("/models/list-model-types-v1",
-            description="List model types",
-            response_model=StandardSuccessResponseV1[ModelTypeResponse],
-            tags=["deprecated2"],
-            status_code=200,
-            responses=ApiResponseHandlerV1.listErrors([400, 500]))
-async def list_model_types_v1(request: Request, dataset: str):
-    response_handler = ApiResponseHandlerV1(request)
-    bucket_name = "datasets"
-    base_path = f"{dataset}/output/scores-graph"
-
-    try:
-        objects = request.app.minio_client.list_objects(bucket_name, prefix=base_path, recursive=True)
-        files = [obj.object_name for obj in objects]
-
-        model_types = set()
-        pattern = rf".*score-(.+?)-{re.escape(dataset)}\.png"
-        for file in files:
-            match = re.match(pattern, file)
-            if match:
-                model_types.add(match.group(1))
-
-        return response_handler.create_success_response_v1(
-            response_data={"model_types": list(model_types)},
-            http_status_code=200,
-        )
-
-    except Exception as e:
-        return response_handler.create_error_response_v1(
-            error_code=ErrorCode.OTHER_ERROR,
-            error_string=str(e),
-            http_status_code=500,
-        )    
     
 
 @router.get("/static/models/get-model-card/{file_path:path}",

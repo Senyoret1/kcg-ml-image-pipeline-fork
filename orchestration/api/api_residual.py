@@ -24,12 +24,6 @@ def set_image_rank_residual(request: Request, ranking_residual: RankingResidual)
              description="Sets the rank residual of an image. The score can only be set one time per image/model combination",
              response_model=StandardSuccessResponseV1[RankingResidual],
              responses=ApiResponseHandlerV1.listErrors([400, 422]))
-@router.post("/residual/image-rank-residual",
-             tags = ["deprecated2"],
-             status_code=201,
-             description="depreacted: use /image-scores/residuals/set-image-rank-residual ",
-             response_model=StandardSuccessResponseV1[ResponseRankingResidual],
-             responses=ApiResponseHandlerV1.listErrors([400, 422]))
 async def set_image_rank_residual(request: Request, ranking_residual: RankingResidual):
     api_response_handler = await ApiResponseHandlerV1.createInstance(request)
     query = {"image_hash": ranking_residual.image_hash, "model_id": ranking_residual.model_id}
@@ -67,12 +61,6 @@ def get_image_rank_residual_by_hash(request: Request, image_hash: str, model_id:
 @router.get("/image-scores/residuals/get-image-rank-residual", 
             description="Get image rank residual by hash",
             tags = ["image scores"],
-            status_code=200,
-            response_model=StandardSuccessResponseV1[RankingResidual],
-            responses=ApiResponseHandlerV1.listErrors([400, 422]))
-@router.get("/residual/image-rank-residual-by-hash", 
-            description="deprecated: use /image-scores/residuals/get-image-rank-residual ",
-            tags = ["deprecated2"],
             status_code=200,
             response_model=StandardSuccessResponseV1[RankingResidual],
             responses=ApiResponseHandlerV1.listErrors([400, 422]))
@@ -118,12 +106,6 @@ def get_image_rank_residuals_by_model_id(request: Request, model_id: int):
             tags = ["image scores"],
             status_code=200,
             response_model=StandardSuccessResponseV1[ResponseRankingResidual],
-            responses=ApiResponseHandlerV1.listErrors([422]))
-@router.get("/residual/image-rank-residuals-by-model-id",
-            description="deprecated: use /image-scores/residuals/list-image-rank-residuals-by-model-id ",
-            tags = ["deprecated2"],
-            status_code=200,
-            response_model=StandardSuccessResponseV1[RankingResidual],
             responses=ApiResponseHandlerV1.listErrors([422]))
 def get_image_rank_residuals_by_model_id(request: Request, model_id: str):
     api_response_handler = ApiResponseHandlerV1(request)
