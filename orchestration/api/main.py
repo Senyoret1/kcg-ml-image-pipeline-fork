@@ -7,7 +7,8 @@ from fastapi.responses import JSONResponse
 
 from orchestration.api.api_controllers.all_images.all_images_db_controller import AllImagesDbController
 from orchestration.api.api_controllers.all_images.all_images_db_schemas import AllImagesDbSchemas
-from orchestration.api.utils.kgc_requests_middleware import KgcRequestsMiddleware
+from orchestration.api.api_controllers.buckets.buckets_db_controller import BucketsDbController
+from orchestration.api.utils.kcg_requests_middleware import KcgRequestsMiddleware
 from .api_utils import ApiResponseHandlerV1, PrettyJSONResponse, ApiResponseHandler, ErrorCode,  StandardErrorResponseV1, StandardSuccessResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi import status, Request
@@ -47,8 +48,8 @@ from orchestration.api.api_image_hashes import router as image_hashes_router
 from orchestration.api.api_external_images import router as external_images_router
 from orchestration.api.api_extracts import router as extracts_router
 from orchestration.api.api_ingress_videos import router as ingress_videos_router
-from orchestration.api.api_bucket import router as bucket_router
-from orchestration.api.api_all_images import router as all_images
+from orchestration.api.api_controllers.buckets.api_bucket import router as bucket_router
+from orchestration.api.api_controllers.all_images.api_all_images import router as all_images
 from orchestration.api.api_video_game import router as video_game_router
 from orchestration.api.api_clustered_image import router as image_clustered_router
 from orchestration.api.api_cluster_model import router as cluster_model_router
@@ -59,7 +60,7 @@ app = FastAPI(title="Orchestration API")
 
 @app.middleware("http")
 async def requests_middleware(request: Request, call_next):
-    return await KgcRequestsMiddleware.process_requests(request, call_next)
+    return await KcgRequestsMiddleware.process_requests(request, call_next)
 
 app.add_middleware(
     CORSMiddleware,
@@ -244,7 +245,7 @@ def startup_db_client():
 
     # bucket collection
 
-    app.buckets_collection = app.mongodb_db["buckets"]
+    app.buckets_collection = BucketsDbController.get_instance().prepare(app.mongodb_db)
 
     app.datasets_collection = app.mongodb_db["datasets"]
 
@@ -551,12 +552,11 @@ def startup_db_client():
 
 
     print("Connected to the MongoDB database!")
-    '''
+
     # get minio client
     app.minio_client = get_minio_client(minio_ip_addr=config["MINIO_ADDRESS"],
                                         minio_access_key=config["MINIO_ACCESS_KEY"],
                                         minio_secret_key=config["MINIO_SECRET_KEY"])
-    '''
 
 @app.on_event("shutdown")
 def shutdown_db_client():

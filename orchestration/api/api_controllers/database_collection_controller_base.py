@@ -6,7 +6,7 @@ from pymongo.database import Database
 from orchestration.api.utils.singleton_base import SingletonBase
 
 T = TypeVar('T')
-class DatabaseCollectionControlletBase(SingletonBase[T], Generic[T]):
+class DatabaseCollectionControllerBase(SingletonBase[T], Generic[T]):
     __collection_name: str = None
     @property
     def collection_name(self) -> str:
@@ -68,11 +68,11 @@ class DatabaseCollectionControlletBase(SingletonBase[T], Generic[T]):
 
             self._validation_schema = {"$jsonSchema": self._validation_schema}
 
-    def create_index_if_not_exists(self, index_key, index_name: str):
+    def create_index_if_not_exists(self, index_key, index_name: str, unique_index=False):
         existing_indexes = self.collection.index_information()
         
         if index_name not in existing_indexes:
-            self.collection.create_index(index_key, name=index_name)
+            self.collection.create_index(index_key, name=index_name, unique=unique_index)
             print(f"Index '{index_name}' created on collection '{self.collection.name}'.")
         else:
             print(f"Index '{index_name}' already exists on collection '{self.collection.name}'.")

@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, validator
 class DatabaseOperationResponseType(Enum):
     SUCCESS = 1
     INTERNAL_ERROR = 2
-    NOT_ALLOWED = 3
+    REQUEST_REJECTED = 3
 
 T = TypeVar('T')
 class DatabaseOperationResponse(BaseModel, Generic[T]):

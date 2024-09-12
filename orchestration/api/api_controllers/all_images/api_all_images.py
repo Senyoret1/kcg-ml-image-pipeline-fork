@@ -5,7 +5,7 @@ from orchestration.api.api_controllers.all_images.all_images_db_controller impor
 from orchestration.api.api_controllers.all_images.all_images_db_schemas import AllImagesDbSchemas
 from orchestration.api.utils.api_operations_utils import ApiUtils
 from orchestration.api.utils.date_filter_objects import ElapsedTimeUnit, create_date_filter_from_api_values
-from .api_utils import StandardSuccessResponseV1, ApiResponseHandlerV1, ErrorCode
+from ...api_utils import StandardSuccessResponseV1, ApiResponseHandlerV1, ErrorCode
 from typing import List
 
 router = APIRouter()
@@ -81,7 +81,6 @@ async def get_image_by_hash(
             response_model=StandardSuccessResponseV1[AllImagesApiSchemas.InvalidEntriesResponse],  
             responses=ApiResponseHandlerV1.listErrors([404, 422, 500]))
 async def get_image_by_hash(request: Request):
-    # Find the image in the all-images collection by its hash
     db_response = AllImagesDbController.get_instance().find_images_with_invalid_schema()
 
     db_response.response_content = {"entries": db_response.response_content}

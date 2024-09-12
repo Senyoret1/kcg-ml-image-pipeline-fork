@@ -2,7 +2,7 @@ from fastapi import Request
 
 from orchestration.api.api_utils import ApiResponseHandlerV1, ErrorCode
 
-class KgcRequestsMiddleware():
+class KcgRequestsMiddleware():
     @staticmethod
     async def process_requests(request: Request, call_next):
         response_handler = await ApiResponseHandlerV1.createInstance(request)

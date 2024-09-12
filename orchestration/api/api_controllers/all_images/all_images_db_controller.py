@@ -10,13 +10,13 @@ import pymongo
 import pymongo.database
 
 from orchestration.api.api_controllers.all_images.all_images_db_schemas import AllImagesDbSchemas
-from orchestration.api.api_controllers.database_collection_controller_base import DatabaseCollectionControlletBase
+from orchestration.api.api_controllers.database_collection_controller_base import DatabaseCollectionControllerBase
 from orchestration.api.utils.api_operations_utils import ApiUtils
 from orchestration.api.utils.database_operation_response import DatabaseOperationResponse
 from orchestration.api.utils.date_filter_objects import DateFilterParams, ElapsedTimeFilterParams, ElapsedTimeUnit
 from orchestration.api.utils.uuid64 import Uuid64
 
-class AllImagesDbController(DatabaseCollectionControlletBase['AllImagesDbController']):
+class AllImagesDbController(DatabaseCollectionControllerBase['AllImagesDbController']):
     @classmethod
     def _create_instance(cls):
         return AllImagesDbController(cls._creation_key)

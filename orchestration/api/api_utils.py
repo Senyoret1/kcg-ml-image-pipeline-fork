@@ -402,7 +402,7 @@ class StandardErrorResponseV1(BaseStandardResponseV1):
 class ApiResponseHandlerV1:
     default_database_http_statuses = {
         DatabaseOperationResponseType.INTERNAL_ERROR: 500,
-        DatabaseOperationResponseType.NOT_ALLOWED: 422
+        DatabaseOperationResponseType.REQUEST_REJECTED: 422
     }
 
     def __init__(self, request: Request, body_data: Optional[Dict[str, Any]] = None, _created_with_helper=False):
@@ -536,8 +536,11 @@ class ApiResponseHandlerV1:
         deleting_single_element: bool,
         success_http_status_code: int = 200,
         headers: dict = {},
-    ):
+    ):  
         if (database_response.response_type == DatabaseOperationResponseType.SUCCESS):
+            if not isinstance(database_response.response_content, int):
+                raise NotImplementedError("DatabaseOperationResponse instances for successful deletion operations must return how many elements were deleted.")
+
             if deleting_single_element:
                 return self.create_success_delete_response_v1(database_response.response_content > 0, success_http_status_code, headers)
             else:
