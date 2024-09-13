@@ -38,7 +38,7 @@ class AllImagesDbController(DatabaseCollectionControllerBase['AllImagesDbControl
         return self.collection
     
     @validate_call
-    def add_image(self, data: AllImagesDbSchemas.AddDataSchema):
+    def add_image(self, data: AllImagesDbSchemas.AddDataSchema) -> DatabaseOperationResponse[list[AllImagesDbSchemas.DatabaseSchema]]:
         try:
             new_document = data.model_dump()
             new_document['uuid'] = Uuid64.from_formatted_string(data.uuid).to_mongo_value()
@@ -46,6 +46,10 @@ class AllImagesDbController(DatabaseCollectionControllerBase['AllImagesDbControl
             self.collection.insert_one(new_document)
 
             print(f"Inserted new document into all-images collection: {new_document}")
+
+            self._process_data_types(new_document)
+
+            return DatabaseOperationResponse(response_content=new_document)
         except Exception as e:
             raise Exception(f"Error adding an image to the all images collection: {e}")
 

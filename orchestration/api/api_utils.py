@@ -527,7 +527,7 @@ class ApiResponseHandlerV1:
         else:
             http_code = self.default_database_http_statuses.get(database_response.response_type)
             http_code = http_code if http_code != None else 500
-            # TODO: We need a specific code for this.
+            # TODO: We need a specific ErrorCode value for this.
             return self.create_error_response_v1(ErrorCode.OTHER_ERROR, database_response.error_description, http_code, headers)
         
     def process_deletion_database_response(
@@ -548,7 +548,7 @@ class ApiResponseHandlerV1:
         else:
             http_code = self.default_database_http_statuses.get(database_response.response_type)
             http_code = http_code if http_code != None else 500
-            # TODO: We need a specific code for this.
+            # TODO: We need a specific ErrorCode value for this.
             return self.create_error_response_v1(ErrorCode.OTHER_ERROR, database_response.error_description, http_code, headers)
             
 
@@ -857,7 +857,6 @@ def remove_from_additional_collections(request, image_hash, bucket_id, image_sou
     and image source.
     """
     collections_to_remove = [
-        #request.app.all_image_collection,
         request.app.image_rank_scores_collection,
         request.app.image_classifier_scores_collection,
         request.app.image_rank_use_count_collection,
@@ -883,13 +882,6 @@ def remove_from_additional_collections(request, image_hash, bucket_id, image_sou
         query = {}
 
         # Handle special cases
-        '''
-        if collection == request.app.all_image_collection:
-            query = {"image_hash": image_hash, "bucket_id": bucket_id}
-            print(f"Removing documents with image_hash: {image_hash} and bucket_id: {bucket_id} from {collection.name}")
-        
-        elif collection in [request.app.image_rank_scores_collection, 
-        '''
         if collection in [request.app.image_rank_scores_collection,
                           request.app.image_classifier_scores_collection, 
                           request.app.irrelevant_images_collection]:

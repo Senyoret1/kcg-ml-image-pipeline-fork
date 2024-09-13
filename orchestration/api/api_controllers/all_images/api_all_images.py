@@ -4,7 +4,7 @@ from orchestration.api.api_controllers.all_images.all_images_api_schemas import 
 from orchestration.api.api_controllers.all_images.all_images_db_controller import AllImagesDbController
 from orchestration.api.api_controllers.all_images.all_images_db_schemas import AllImagesDbSchemas
 from orchestration.api.utils.api_operations_utils import ApiUtils
-from orchestration.api.utils.date_filter_objects import ElapsedTimeUnit, create_date_filter_from_api_values
+from orchestration.api.utils.date_filter_objects import ApiDateFilterCreationError, ElapsedTimeUnit, create_date_filter_from_api_values
 from ...api_utils import StandardSuccessResponseV1, ApiResponseHandlerV1, ErrorCode
 from typing import List
 
@@ -30,13 +30,11 @@ async def list_all_images(
     time_unit: Optional[ElapsedTimeUnit] = Query(None, description="If the value of 'time_interval' is in minutes or seconds")
 ):
 
-    date_filter = None
-    try:
-        date_filter = create_date_filter_from_api_values(start_date, end_date, time_interval, time_unit)
-    except Exception as e:
+    date_filter = create_date_filter_from_api_values(start_date, end_date, time_interval, time_unit)
+    if isinstance(date_filter, ApiDateFilterCreationError):
         return request.state.response_handler.create_error_response_v1(
             error_code=ErrorCode.INVALID_PARAMS,
-            error_string=str(e),
+            error_string=str(date_filter.error_msg),
             http_status_code=422
         )
 
