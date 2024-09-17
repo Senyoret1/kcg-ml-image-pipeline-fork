@@ -3,7 +3,10 @@ from pymongo import MongoClient
 from minio import Minio
 from io import BytesIO
 from minio.error import S3Error
+import sys
 import io
+base_directory = "./"
+sys.path.insert(0, base_directory)
 from utility.minio import cmd
 
 # MongoDB connection setup
