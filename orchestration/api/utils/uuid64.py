@@ -68,7 +68,7 @@ class Uuid64():
         return instance
     
     @staticmethod
-    def from_formatted_string(value: str) -> str:
+    def from_formatted_string(value: str) -> Uuid64:
         '''Creates a new Uuid64 instance from a formatted string. The string must be an uppearcase hex string
         like this: "1234-5678-90AB-CDEF". The value must be for an UUID from the present or the past, not the future.'''
         Uuid64._validate_uuid_string(value)
@@ -82,7 +82,7 @@ class Uuid64():
         Uuid64._validate_uuid_int_value(self._value)
         return self._value
     
-    def to_formatted_str(self):
+    def to_formatted_str(self) -> str:
         '''Returns the formatted string representation of the UUID.'''
         return str(self)
     

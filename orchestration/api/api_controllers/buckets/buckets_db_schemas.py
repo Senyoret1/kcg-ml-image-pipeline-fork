@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 from typing_extensions import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field

@@ -93,16 +93,21 @@ class DatabaseCollectionControllerBase(SingletonBase[T], Generic[T]):
             for key in properties:
                 p: dict = properties[key]
                 # If the bsonType property was not added to a property, it is not possible to create a valid schema.
-                if p.get("bsonType", None) == None:
-                    raise Exception(f"Imposible to create the validation schema for the {self.collection_name} collection. You must define a 'bsonType' value for the '{p}' property.")
+                if p.get("bsonType", None) == None and p.get("oneOf", None) == None:
+                    raise Exception(f"Imposible to create the validation schema for the {self.collection_name} collection. You must define a 'bsonType' or 'oneOf' value for the '{p}' property.")
                 
                 # If the title property is just the key name, remove it.
                 title: str = p.get("title", None)
                 if title and title.upper() == key.replace('_', ' ').upper():
                     p.pop("title")
                 
-                # This is for json schemas, not for bson schemas, so it is removed.
-                p.pop("type")
+                # These properties are for json schemas, not for bson schemas, so are removed if pressent.
+                if "type" in p:
+                    p.pop("type")
+                if "anyOf" in p:
+                    p.pop("anyOf")
+                if "default" in p:
+                    p.pop("default")
 
             # Save the full schema.
             self._validation_schema = {"$jsonSchema": self._validation_schema}

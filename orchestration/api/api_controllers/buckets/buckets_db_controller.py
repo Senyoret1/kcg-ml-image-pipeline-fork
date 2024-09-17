@@ -81,7 +81,7 @@ class BucketsDbController(DatabaseCollectionControllerBase['BucketsDbController'
         except Exception as e:
             raise Exception(f"Error while finding invalid buckets in database: {e}")
         
-    def delete_bucket_by_id(self, bucket_id: int) -> DatabaseOperationResponse:
+    def delete_bucket_by_id(self, bucket_id: int) -> DatabaseOperationResponse[int]:
         try:
             if 0 <= bucket_id < 3:
                 return DatabaseOperationResponse(
