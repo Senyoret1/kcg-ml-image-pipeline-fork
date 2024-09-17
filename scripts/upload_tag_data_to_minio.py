@@ -25,10 +25,10 @@ minio_client = Minio(
 bucket_name = "tags"  
 
 # Ensure bucket exists
-if not cmd.check_if_bucket_exists(bucket_name):
-    cmd.create_bucket(bucket_name)
+if not cmd.check_if_bucket_exists(minio_client, bucket_name):
+    cmd.create_bucket(minio_client,bucket_name)
 
-# Fetch all documents from MongoDB
+# Fetch all documents from MongoDB 
 documents = collection.find()
 
 # Iterate over each document
