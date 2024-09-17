@@ -26,7 +26,7 @@ bucket_name = "tags"
 
 # Ensure bucket exists
 if not cmd.check_if_bucket_exists(minio_client, bucket_name):
-    cmd.create_bucket(minio_client,bucket_name)
+    cmd.create_bucket(minio_client, bucket_name)
 
 # Fetch all documents from MongoDB 
 documents = collection.find()
@@ -34,8 +34,18 @@ documents = collection.find()
 # Iterate over each document
 for doc in documents:
     try:
-        # Define file name based on 'tag_id' and 'image_hash'
+        # Define file name based on 'tag_id', 'tag_type', and 'image_hash'
         file_name = f"{doc['tag_id']}-{doc['tag_type']}-{doc['image_hash']}.json"
+
+        # Check if the file already exists in the Minio bucket
+        try:
+            minio_client.stat_object(bucket_name, file_name)
+            print(f"File {file_name} already exists in the bucket, skipping upload.")
+            continue  # Skip this file since it already exists
+        except S3Error as stat_error:
+            if stat_error.code != 'NoSuchKey':
+                print(f"Error while checking if file exists: {stat_error}")
+                continue  # Skip this iteration if there's an error other than 'NoSuchKey'
 
         # Convert the MongoDB document to JSON format
         json_data = json.dumps(doc, default=str)
