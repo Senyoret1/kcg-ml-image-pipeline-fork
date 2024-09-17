@@ -168,25 +168,23 @@ async def list_all_images(
 ):
     response_handler = await ApiResponseHandlerV1.createInstance(request)
     try:
-        # Step 1: Find bucket_id from bucket_name
-        bucket = request.app.buckets_collection.find_one({"bucket_name": bucket_name}, {"_id": 1})
+        bucket = request.app.buckets_collection.find_one({"bucket_name": bucket_name}, {"bucket_id": 1})
         if not bucket:
             return response_handler.create_error_response_v1(
                 error_code=ErrorCode.ELEMENT_NOT_FOUND,
                 error_string="Bucket not found",
                 http_status_code=422
             )
-        bucket_id = bucket["_id"]
+        bucket_id = bucket["bucket_id"]
 
-        # Step 2: Find dataset_id from dataset_name and bucket_id
-        dataset = request.app.datasets_collection.find_one({"dataset_name": dataset_name, "bucket_id": bucket_id}, {"_id": 1})
+        dataset = request.app.datasets_collection.find_one({"dataset_name": dataset_name, "bucket_id": bucket_id}, {"dataset_id": 1})
         if not dataset:
             return response_handler.create_error_response_v1(
                 error_code=ErrorCode.ELEMENT_NOT_FOUND,
                 error_string="Dataset not found",
                 http_status_code=422
             )
-        dataset_id = dataset["_id"]
+        dataset_id = dataset["dataset_id"]
 
         # Step 3: Build the query for all_images_collection using bucket_id and dataset_id
         query = {
