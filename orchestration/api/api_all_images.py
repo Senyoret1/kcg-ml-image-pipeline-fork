@@ -149,3 +149,105 @@ async def get_image_by_hash(request: Request, image_hash: str):
             error_string=str(e),
             http_status_code=500
         )
+
+@router.get("/all-images/list-images-with-random-sampling",
+            description="list images according to dataset_name and bucket_name",
+            tags=["all-images"],
+            response_model=StandardSuccessResponseV1[ListAllImagesResponse],
+            responses=ApiResponseHandlerV1.listErrors([422, 500]))
+async def list_all_images(
+    request: Request,
+    bucket_names: Optional[List[str]] = Query(None, description="Bucket Names"),
+    dataset_names: Optional[List[str]] = Query(None, description="Dataset Names"),
+    limit: int = Query(20, description="Limit on the number of results returned"),
+    start_date: Optional[str] = Query(None, description="Start date for filtering results, Must be in the format 'YYYY-MM-DDTHH:MM:SS'"),
+    end_date: Optional[str] = Query(None, description="End date for filtering results, Must be in the format 'YYYY-MM-DDTHH:MM:SS'"),
+    time_interval: Optional[int] = Query(None, description="Time interval in minutes or hours"),
+    time_unit: str = Query("minutes", description="Time unit, either 'minutes' or 'hours'"),
+    random_sampling: bool = Query(True, description="If True, apply random sampling to the results")
+):
+    response_handler = await ApiResponseHandlerV1.createInstance(request)
+    try:
+        query = {}
+
+        # Add the OR conditions for buckets and datasets
+        if bucket_names or dataset_names:
+            query_conditions = []
+            if bucket_names:
+                query_conditions.append({"bucket_name": {"$in": bucket_names}})
+            if dataset_names:
+                query_conditions.append({"dataset_name": {"$in": dataset_names}})
+            if query_conditions:
+                query = {"$or": query_conditions}
+
+        print(f"Initial query conditions: {query}")
+
+        # Add date filters to the query
+        date_query = {}
+        if start_date:
+            start_date_unix = api_date_to_unix_int32(start_date)
+            if start_date_unix is None:
+                return response_handler.create_error_response_v1(
+                    error_code=ErrorCode.OTHER_ERROR,
+                    error_string="Invalid start_date format. Expected format: YYYY-MM-DDTHH:MM:SS",
+                    http_status_code=422
+                )
+            date_query['$gte'] = start_date_unix
+        if end_date:
+            end_date_unix = api_date_to_unix_int32(end_date)
+            if end_date_unix is None:
+                return response_handler.create_error_response_v1(
+                    error_code=ErrorCode.OTHER_ERROR,
+                    error_string="Invalid end_date format. Expected format: YYYY-MM-DDTHH:MM:SS",
+                    http_status_code=422
+                )
+            date_query['$lte'] = end_date_unix
+
+        print(f"Date query after adding start_date and end_date: {date_query}")
+
+        # Calculate the time threshold based on the current time and the specified interval
+        if time_interval is not None:
+            current_time = datetime.utcnow()
+            if time_unit == "minutes":
+                threshold_time = current_time - timedelta(minutes=time_interval)
+            elif time_unit == "hours":
+                threshold_time = current_time - timedelta(hours=time_interval)
+            else:
+                raise HTTPException(status_code=400, detail="Invalid time unit. Use 'minutes' or 'hours'.")
+            date_query['$gte'] = int(threshold_time.timestamp())
+
+        print(f"Date query after adding time interval: {date_query}")
+
+        if date_query:
+            query['date'] = date_query
+
+        print(f"Final query: {query}")
+
+        # If random_sampling is True, apply random sampling
+        if random_sampling:
+            cursor = request.app.all_image_collection.aggregate([
+                {"$match": query},
+                {"$sample": {"size": limit}}
+            ])
+        else:
+            # If not random sampling, return the first 'limit' results without sorting
+            cursor = request.app.all_image_collection.find(query).limit(limit)
+
+        images = list(cursor)
+
+        print(f"Number of images found: {len(images)}")
+
+        AllImagesHelpers.clean_image_list_for_api_response(images)
+
+        return response_handler.create_success_response_v1(
+            response_data={"images": images},
+            http_status_code=200
+        )
+
+    except Exception as e:
+        print(f"Exception: {e}")
+        return response_handler.create_error_response_v1(
+            error_code=ErrorCode.OTHER_ERROR,
+            error_string=str(e),
+            http_status_code=500
+        )

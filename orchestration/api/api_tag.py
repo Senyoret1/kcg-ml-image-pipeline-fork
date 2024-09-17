@@ -6,6 +6,10 @@ from .api_utils import PrettyJSONResponse, validate_date_format, ErrorCode, WasP
 from .api_utils import build_date_query
 import traceback
 from bson import ObjectId
+import json
+from utility.minio import cmd
+from io import BytesIO
+import io
 
 
 
@@ -167,7 +171,7 @@ def remove_tag_deprecated(request: Request, tag_id: int):
              status_code=201,
              tags=["deprecated3"], 
              description="changed with /tags/add-tag-to-image-v2",
-             response_model=StandardSuccessResponseV1[ImageTag], 
+             response_model=StandardSuccessResponseV1[ImageTagResponse], 
              responses=ApiResponseHandlerV1.listErrors([400, 422, 500]))
 def add_tag_to_image(request: Request, tag_id: int, file_hash: str, tag_type: int, user_who_created: str):
     response_handler = ApiResponseHandlerV1(request)
@@ -184,7 +188,7 @@ def add_tag_to_image(request: Request, tag_id: int, file_hash: str, tag_type: in
 
         image = request.app.completed_jobs_collection.find_one(
             {'task_output_file_dict.output_file_hash': file_hash},
-            {"task_output_file_dict.output_file_path": 1, "image_uuid": 1}  # Retrieve image_uuid along with the file path
+            {"task_output_file_dict.output_file_path": 1}  
         )
         if not image:
             return response_handler.create_error_response_v1(
@@ -194,17 +198,15 @@ def add_tag_to_image(request: Request, tag_id: int, file_hash: str, tag_type: in
             )
 
         file_path = image.get("task_output_file_dict", {}).get("output_file_path", "")
-        image_uuid = image.get("image_uuid", None)  # Get the image_uuid if available
 
         # Check if the tag is already associated with the image
         existing_image_tag = request.app.image_tags_collection.find_one({
             "tag_id": tag_id, 
             "image_hash": file_hash, 
-            "image_source": generated_image
+            "image_source": 'generated_image'
         })
         if existing_image_tag:
             existing_image_tag.pop('_id', None)  # Remove _id from the existing document
-            # Return a success response indicating that the tag has already been added to the image
             return response_handler.create_success_response_v1(
                 response_data=existing_image_tag, 
                 http_status_code=200
@@ -215,17 +217,20 @@ def add_tag_to_image(request: Request, tag_id: int, file_hash: str, tag_type: in
             "tag_id": tag_id,
             "file_path": file_path,  
             "image_hash": file_hash,
-            "image_uuid": image_uuid,  # Include the image_uuid field
             "tag_type": tag_type,
-            "image_source": generated_image,
+            "image_source": 'generated_image',
             "user_who_created": user_who_created,
-            "tag_count": 1,  # Since this is a new tag for this image, set count to 1
+            "tag_count": 1,
             "creation_time": date_now
         }
         result = request.app.image_tags_collection.insert_one(image_tag_data)
-        # After insertion, add the inserted _id back to the data and remove it
         image_tag_data['_id'] = result.inserted_id
         image_tag_data.pop('_id', None)
+
+        # Convert image_tag_data to JSON and upload to Minio
+        json_data = json.dumps(image_tag_data)
+        file_name = f"{image_tag_data['tag_id']}-{image_tag_data['tag_type']}-{image_tag_data['image_hash']}.json"
+        cmd.upload_data(request.app.minio_client, 'tags', file_name, io.BytesIO(json_data.encode('utf-8')))
 
         return response_handler.create_success_response_v1(
             response_data=image_tag_data, 
@@ -237,6 +242,7 @@ def add_tag_to_image(request: Request, tag_id: int, file_hash: str, tag_type: in
             error_string=str(e), 
             http_status_code=500
         )
+
 
 
 @router.post("/tags/add-tag-to-image-v2",
@@ -262,15 +268,15 @@ def add_tag_to_image_v2(request: Request, tag_id: int, file_hash: str, tag_type:
         if image_source == "generated_image":
             collection = request.app.completed_jobs_collection
             query = {'task_output_file_dict.output_file_hash': file_hash}
-            projection = {"task_output_file_dict.output_file_path": 1, "image_uuid": 1}  # Include image_uuid in projection
+            projection = {"task_output_file_dict.output_file_path": 1}  
         elif image_source == "extract_image":
             collection = request.app.extracts_collection
             query = {'image_hash': file_hash}
-            projection = {"file_path": 1, "image_uuid": 1}  # Include image_uuid in projection
+            projection = {"file_path": 1} 
         elif image_source == "external_image":
             collection = request.app.external_images_collection
             query = {'image_hash': file_hash}
-            projection = {"file_path": 1, "image_uuid": 1}  # Include image_uuid in projection
+            projection = {"file_path": 1} 
         else:
             return response_handler.create_error_response_v1(
                 error_code=ErrorCode.INVALID_PARAMS,
@@ -287,7 +293,6 @@ def add_tag_to_image_v2(request: Request, tag_id: int, file_hash: str, tag_type:
             )
 
         file_path = image.get("task_output_file_dict", {}).get("output_file_path", "") if image_source == "generated_image" else image.get("file_path", "")
-        image_uuid = image.get("image_uuid", None)  # Get the image_uuid if available
 
         # Check if the tag is already associated with the image
         existing_image_tag = request.app.image_tags_collection.find_one({
@@ -296,8 +301,7 @@ def add_tag_to_image_v2(request: Request, tag_id: int, file_hash: str, tag_type:
             "image_source": image_source
         })
         if existing_image_tag:
-            existing_image_tag.pop('_id', None)  # Remove _id from the existing document
-            # Return a success response indicating that the tag has already been added to the image
+            existing_image_tag.pop('_id', None)
             return response_handler.create_success_response_v1(
                 response_data=existing_image_tag, 
                 http_status_code=200
@@ -308,17 +312,20 @@ def add_tag_to_image_v2(request: Request, tag_id: int, file_hash: str, tag_type:
             "tag_id": tag_id,
             "file_path": file_path,  
             "image_hash": file_hash,
-            "image_uuid": image_uuid,  # Include the image_uuid field
             "tag_type": tag_type,
             "image_source": image_source,
             "user_who_created": user_who_created,
-            "tag_count": 1,  # Since this is a new tag for this image, set count to 1
+            "tag_count": 1,
             "creation_time": date_now
         }
         result = request.app.image_tags_collection.insert_one(image_tag_data)
-        # After insertion, add the inserted _id back to the data and remove it
         image_tag_data['_id'] = result.inserted_id
         image_tag_data.pop('_id', None)
+
+        # Convert image_tag_data to JSON and upload to Minio
+        json_data = json.dumps(image_tag_data)
+        file_name = f"{image_tag_data['tag_id']}-{image_tag_data['tag_type']}-{image_tag_data['image_hash']}.json"
+        cmd.upload_data(request.app.minio_client, 'tags', file_name, io.BytesIO(json_data.encode('utf-8')))
 
         return response_handler.create_success_response_v1(
             response_data=image_tag_data, 
@@ -330,6 +337,7 @@ def add_tag_to_image_v2(request: Request, tag_id: int, file_hash: str, tag_type:
             error_string=str(e), 
             http_status_code=500
         )
+
 
 
 
@@ -1220,8 +1228,7 @@ def get_tagged_images_v2(
             error_code=ErrorCode.OTHER_ERROR, error_string="Internal Server Error", http_status_code=500
         )
 
-    
-        
+
 @router.get("/tags/get-images-by-image-type",
             tags=["tags"], 
             status_code=200,
@@ -1669,3 +1676,72 @@ def update_tag_category_deprecated_status(request: Request, tag_category_id: int
         response_data= updated_tag_category, 
         http_status_code=200,
     )
+
+@router.get("/tags/get-images-by-tag-id-v2", 
+            tags=["tags"], 
+            status_code=200,
+            description="Get images by tag_id",
+            response_model=StandardSuccessResponseV1[ListImageTag], 
+            responses=ApiResponseHandlerV1.listErrors([400, 422, 500]))
+def get_tagged_images_v1(
+    request: Request, 
+    tag_id: int,
+    image_source: str = Query("generated_image", regex="^(generated_image|extract_image|external_image)$"),  # Add image_source as a query parameter
+    start_date: str = None,
+    end_date: str = None,
+    order: str = Query("desc", description="Order in which the data should be returned. 'asc' for oldest first, 'desc' for newest first")
+):
+    response_handler = ApiResponseHandlerV1(request)
+    try:
+        # Validate start_date and end_date
+        if start_date:
+            validated_start_date = validate_date_format(start_date)
+            if validated_start_date is None:
+                return response_handler.create_error_response_v1(
+                    error_code=ErrorCode.INVALID_PARAMS, 
+                    error_string="Invalid start_date format. Expected format: YYYY-MM-DDTHH:MM:SS", 
+                    http_status_code=400,
+                )
+        if end_date:
+            validated_end_date = validate_date_format(end_date)
+            if validated_end_date is None:
+                return response_handler.create_error_response_v1(
+                    error_code=ErrorCode.INVALID_PARAMS, 
+                    error_string="Invalid end_date format. Expected format: YYYY-MM-DDTHH:MM:SS",
+                    http_status_code=400,
+                )
+
+        # Build the query
+        query = {"tag_id": tag_id, "image_source": image_source}
+        if start_date and end_date:
+            query["creation_time"] = {"$gte": validated_start_date, "$lte": validated_end_date}
+        elif start_date:
+            query["creation_time"] = {"$gte": validated_start_date}
+        elif end_date:
+            query["creation_time"] = {"$lte": validated_end_date}
+
+        # Decide the sort order
+        sort_order = -1 if order == "desc" else 1
+
+        # Execute the query and fetch documents directly
+        image_tags_cursor = request.app.image_tags_collection.find(query).sort("creation_time", sort_order)
+
+        # Convert cursor to list of dictionaries (MongoDB documents)
+        image_info_list = list(image_tags_cursor)
+
+        # Remove the '_id' field from each document in the list
+        for image_info in image_info_list:
+            image_info.pop('_id', None)  # Use .pop() with None to avoid KeyError if '_id' is not present
+
+        # Return the list of images in a standard success response
+        return response_handler.create_success_response_v1(
+            response_data={"images": image_info_list}, 
+            http_status_code=200,
+        )  
+
+    except Exception as e:
+        print(e)
+        # Log the exception details here, if necessary
+        return response_handler.create_error_response_v1(
+            error_code=ErrorCode.OTHER_ERROR, error_string="Internal Server Error", http_status_code=500
+        )

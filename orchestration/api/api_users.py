@@ -1,8 +1,10 @@
 from orchestration.api.deps import is_authenticated,is_admin
 from orchestration.api.mongo_schema.user_schemas import User, LoginRequest
-from .api_utils import PrettyJSONResponse, ApiResponseHandlerV1, StandardSuccessResponseV1, ErrorCode
+from .api_utils import PrettyJSONResponse, ApiResponseHandlerV1, StandardSuccessResponseV1, ErrorCode, generate_uuid
 from fastapi import status, HTTPException, Depends, APIRouter, Request, Query
+from datetime import datetime
 from fastapi.security import OAuth2PasswordRequestForm
+from orchestration.api.utils.uuid64 import Uuid64
 from orchestration.api.jwt import (
     get_hashed_password,
     create_access_token,
@@ -15,20 +17,22 @@ router = APIRouter()
 
 @router.post('/users/create', summary="Create new user")
 def create_user(request: Request, data: User):
-    # querying database to check if user already exist
-    user=request.app.users_collection.find_one({"username": data.username})
+    # querying database to check if user already exists
+    user = request.app.users_collection.find_one({"username": data.username})
     if user is not None:
-            raise HTTPException(
+        raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User with this name already exist"
+            detail="User with this name already exists"
         )
-    
+
+    uuid = Uuid64.create_new_uuid()
+
     user = {
         'username': data.username,
         'password': get_hashed_password(data.password),
         'role': data.role,
         'is_active': True,
-        'uuid': str(uuid4())
+        'uuid': uuid.to_mongo_value()
     }
     request.app.users_collection.insert_one(user)
     # remove the auto generated field
@@ -120,16 +124,55 @@ def list_users(request:Request, user: User = Depends(is_admin)):
 
     return users
 
+@router.get('/users/list-v1', 
+            description="List all users", 
+            status_code=200, 
+            tags=["users"],  
+            response_model=StandardSuccessResponseV1[list],  
+            responses=ApiResponseHandlerV1.listErrors([400, 422, 500]))
+def list_users(request: Request):
+    api_response_handler = ApiResponseHandlerV1(request)
+
+    try:
+        # Fetch users from the database
+        users = list(request.app.users_collection.find({}))
+
+        # Remove sensitive data and format uuid
+        for user in users:
+            user.pop('_id', None)
+            if "uuid" in user:
+                if isinstance(user['uuid'], int):
+                    uuid64 = Uuid64.from_mongo_value(user['uuid'])
+                    user['uuid'] = uuid64.to_formatted_str()
+                elif isinstance(user['uuid'], Uuid64):
+                    user['uuid'] = user['uuid'].to_formatted_str()
+
+        # Return a standardized success response
+        return api_response_handler.create_success_response_v1(
+            response_data=users,
+            http_status_code=200
+        )
+    
+    except Exception as e:
+        # Return a standardized error response in case of any failure
+        return api_response_handler.create_error_response_v1(
+            error_code=ErrorCode.OTHER_ERROR, 
+            error_string="Failed to fetch users.", 
+            http_status_code=500
+        )
+
+
 
 @router.post('/users/create-v1', 
              summary="Create new user",
              tags=["users"],
              response_model=StandardSuccessResponseV1[str],
              responses=ApiResponseHandlerV1.listErrors([400, 422, 500]))
-async def create_user(request: Request, data: User):
+async def create_user_v1(request: Request, data: User):
     response_handler = await ApiResponseHandlerV1.createInstance(request)
     try:
         # Querying database to check if user already exists
+        uuid = Uuid64.create_new_uuid()
         user = request.app.users_collection.find_one({"username": data.username})
         if user is not None:
             return response_handler.create_error_response_v1(
@@ -143,7 +186,7 @@ async def create_user(request: Request, data: User):
             'password': get_hashed_password(data.password),
             'role': data.role,
             'is_active': True,
-            'uuid': str(uuid4())
+            'uuid': uuid.to_mongo_value()
         }
         request.app.users_collection.insert_one(user)
         # Remove the auto generated field
