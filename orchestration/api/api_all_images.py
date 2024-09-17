@@ -157,8 +157,8 @@ async def get_image_by_hash(request: Request, image_hash: str):
             responses=ApiResponseHandlerV1.listErrors([422, 500]))
 async def list_all_images(
     request: Request,
-    bucket_names: Optional[List[str]] = Query(None, description="Bucket Names"),
-    dataset_names: Optional[List[str]] = Query(None, description="Dataset Names"),
+    bucket_name: str = Query(..., description="Bucket Name"),
+    dataset_name: str = Query(..., description="Dataset Name"),
     limit: int = Query(20, description="Limit on the number of results returned"),
     start_date: Optional[str] = Query(None, description="Start date for filtering results, Must be in the format 'YYYY-MM-DDTHH:MM:SS'"),
     end_date: Optional[str] = Query(None, description="End date for filtering results, Must be in the format 'YYYY-MM-DDTHH:MM:SS'"),
@@ -168,19 +168,31 @@ async def list_all_images(
 ):
     response_handler = await ApiResponseHandlerV1.createInstance(request)
     try:
-        query = {}
+        # Step 1: Find bucket_id from bucket_name
+        bucket = request.app.buckets_collection.find_one({"bucket_name": bucket_name}, {"_id": 1})
+        if not bucket:
+            return response_handler.create_error_response_v1(
+                error_code=ErrorCode.ELEMENT_NOT_FOUND,
+                error_string="Bucket not found",
+                http_status_code=422
+            )
+        bucket_id = bucket["_id"]
 
-        # Add the OR conditions for buckets and datasets
-        if bucket_names or dataset_names:
-            query_conditions = []
-            if bucket_names:
-                query_conditions.append({"bucket_name": {"$in": bucket_names}})
-            if dataset_names:
-                query_conditions.append({"dataset_name": {"$in": dataset_names}})
-            if query_conditions:
-                query = {"$or": query_conditions}
+        # Step 2: Find dataset_id from dataset_name and bucket_id
+        dataset = request.app.datasets_collection.find_one({"dataset_name": dataset_name, "bucket_id": bucket_id}, {"_id": 1})
+        if not dataset:
+            return response_handler.create_error_response_v1(
+                error_code=ErrorCode.ELEMENT_NOT_FOUND,
+                error_string="Dataset not found",
+                http_status_code=422
+            )
+        dataset_id = dataset["_id"]
 
-        print(f"Initial query conditions: {query}")
+        # Step 3: Build the query for all_images_collection using bucket_id and dataset_id
+        query = {
+            "bucket_id": bucket_id,
+            "dataset_id": dataset_id
+        }
 
         # Add date filters to the query
         date_query = {}
@@ -216,21 +228,17 @@ async def list_all_images(
                 raise HTTPException(status_code=400, detail="Invalid time unit. Use 'minutes' or 'hours'.")
             date_query['$gte'] = int(threshold_time.timestamp())
 
-        print(f"Date query after adding time interval: {date_query}")
-
         if date_query:
             query['date'] = date_query
 
         print(f"Final query: {query}")
 
-        # If random_sampling is True, apply random sampling
         if random_sampling:
             cursor = request.app.all_image_collection.aggregate([
                 {"$match": query},
                 {"$sample": {"size": limit}}
             ])
         else:
-            # If not random sampling, return the first 'limit' results without sorting
             cursor = request.app.all_image_collection.find(query).limit(limit)
 
         images = list(cursor)
