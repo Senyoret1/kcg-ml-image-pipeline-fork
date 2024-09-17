@@ -6,6 +6,10 @@ from .api_utils import PrettyJSONResponse, validate_date_format, ErrorCode, WasP
 from .api_utils import build_date_query
 import traceback
 from bson import ObjectId
+import json
+from utility.minio import cmd
+from io import BytesIO
+import io
 
 
 
@@ -199,11 +203,10 @@ def add_tag_to_image(request: Request, tag_id: int, file_hash: str, tag_type: in
         existing_image_tag = request.app.image_tags_collection.find_one({
             "tag_id": tag_id, 
             "image_hash": file_hash, 
-            "image_source": generated_image
+            "image_source": 'generated_image'
         })
         if existing_image_tag:
             existing_image_tag.pop('_id', None)  # Remove _id from the existing document
-            # Return a success response indicating that the tag has already been added to the image
             return response_handler.create_success_response_v1(
                 response_data=existing_image_tag, 
                 http_status_code=200
@@ -215,15 +218,19 @@ def add_tag_to_image(request: Request, tag_id: int, file_hash: str, tag_type: in
             "file_path": file_path,  
             "image_hash": file_hash,
             "tag_type": tag_type,
-            "image_source": generated_image,
+            "image_source": 'generated_image',
             "user_who_created": user_who_created,
-            "tag_count": 1,  # Since this is a new tag for this image, set count to 1
+            "tag_count": 1,
             "creation_time": date_now
         }
         result = request.app.image_tags_collection.insert_one(image_tag_data)
-        # After insertion, add the inserted _id back to the data and remove it
         image_tag_data['_id'] = result.inserted_id
         image_tag_data.pop('_id', None)
+
+        # Convert image_tag_data to JSON and upload to Minio
+        json_data = json.dumps(image_tag_data)
+        file_name = f"{image_tag_data['tag_id']}-{image_tag_data['tag_type']}-{image_tag_data['image_hash']}.json"
+        cmd.upload_data(request.app.minio_client, 'tags', file_name, io.BytesIO(json_data.encode('utf-8')))
 
         return response_handler.create_success_response_v1(
             response_data=image_tag_data, 
@@ -235,6 +242,7 @@ def add_tag_to_image(request: Request, tag_id: int, file_hash: str, tag_type: in
             error_string=str(e), 
             http_status_code=500
         )
+
 
 
 @router.post("/tags/add-tag-to-image-v2",
@@ -293,8 +301,7 @@ def add_tag_to_image_v2(request: Request, tag_id: int, file_hash: str, tag_type:
             "image_source": image_source
         })
         if existing_image_tag:
-            existing_image_tag.pop('_id', None)  # Remove _id from the existing document
-            # Return a success response indicating that the tag has already been added to the image
+            existing_image_tag.pop('_id', None)
             return response_handler.create_success_response_v1(
                 response_data=existing_image_tag, 
                 http_status_code=200
@@ -308,13 +315,17 @@ def add_tag_to_image_v2(request: Request, tag_id: int, file_hash: str, tag_type:
             "tag_type": tag_type,
             "image_source": image_source,
             "user_who_created": user_who_created,
-            "tag_count": 1,  # Since this is a new tag for this image, set count to 1
+            "tag_count": 1,
             "creation_time": date_now
         }
         result = request.app.image_tags_collection.insert_one(image_tag_data)
-        # After insertion, add the inserted _id back to the data and remove it
         image_tag_data['_id'] = result.inserted_id
         image_tag_data.pop('_id', None)
+
+        # Convert image_tag_data to JSON and upload to Minio
+        json_data = json.dumps(image_tag_data)
+        file_name = f"{image_tag_data['tag_id']}-{image_tag_data['tag_type']}-{image_tag_data['image_hash']}.json"
+        cmd.upload_data(request.app.minio_client, 'tags', file_name, io.BytesIO(json_data.encode('utf-8')))
 
         return response_handler.create_success_response_v1(
             response_data=image_tag_data, 
@@ -326,6 +337,7 @@ def add_tag_to_image_v2(request: Request, tag_id: int, file_hash: str, tag_type:
             error_string=str(e), 
             http_status_code=500
         )
+
 
 
 
