@@ -1289,3 +1289,4 @@ def get_random_image_date_range(
     ExtractsHelpers.clean_extract_list_for_api_response(documents)
 
     return documents
+

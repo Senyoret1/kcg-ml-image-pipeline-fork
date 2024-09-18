@@ -298,6 +298,34 @@ class RankingScore(BaseModel):
             "sigma_score": self.sigma_score
         }
 
+class OldRankingScoreForBatchInsertion(BaseModel):
+    rank_model_id: int
+    rank_id: int
+    uuid: str
+    image_uuid: str
+    image_hash: str
+    score: float    
+    sigma_score: float
+    image_source: str
+
+class OldRankingScoreListForBatchInsertion(BaseModel):
+    scores: List[OldRankingScoreForBatchInsertion]  
+
+class RankingScoreForBatchInsertion(BaseModel):
+    rank_model_id: int
+    rank_id: int
+    uuid: str
+    image_hash: str
+    score: float    
+    sigma_score: float
+    image_source: str
+    image_uuid: str
+    bucket_id: int
+    dataset_id: int
+
+class RankingScoreListForBatchInsertion(BaseModel):
+    scores: List[RankingScoreForBatchInsertion]  
+
 class ResponseRankingScore(BaseModel):
     rank_model_id: int
     rank_id: int
@@ -372,7 +400,7 @@ class ListImageHash(BaseModel):
 class ListImageHashRequest(BaseModel):
     image_hash_list: List[str]    
 
-class ClassifierScoreV1(BaseModel):
+class ClassifierScoreV2(BaseModel):
     uuid: Union[str, None]
     task_type: str
     classifier_id: int
@@ -393,6 +421,26 @@ class ClassifierScoreV1(BaseModel):
             "creation_time" : self.creation_time,
             "image_uuid": self.image_uuid
         }
+    
+class ClassifierScoreV1(BaseModel):
+    uuid: Union[str, None]
+    task_type: str
+    classifier_id: int
+    image_hash: str
+    tag_id: int
+    score: float
+    creation_time: Union[str, None] = None
+
+    def to_dict(self):
+        return {
+            "uuid": self.uuid,
+            "task_type": self.task_type,
+            "classifier_id": self.classifier_id,
+            "image_hash": self.image_hash,
+            "tag_id": self.tag_id,
+            "score": self.score,
+            "creation_time" : self.creation_time,
+        }    
 
 class ImageResolution(BaseModel):
     width: int
@@ -564,9 +612,14 @@ class ListClassifierScore1(BaseModel):
 class ListClassifierScore2(BaseModel):
     scores: List[ClassifierScoreV1]
 
+class ListClassifierScoreWithImageUUID(BaseModel):
+    scores: List[ClassifierScoreV2] 
+
 class ListClassifierScore4(RootModel[List[ClassifierScoreV1]]):
     pass
 
+class ListClassifierScore5(RootModel[List[ClassifierScoreV2]]):
+    pass
 
 class ListClassifierScore3(BaseModel):
     data: List[ClassifierScoreV1]
@@ -579,15 +632,27 @@ class ClassifierScoreRequest(BaseModel):
 
 class ClassifierScoreRequestV1(BaseModel):
     job_uuid: str
+    image_uuid: str
     classifier_id: int
     score: float
     tag_id: int
     image_hash: str
     image_source: str
 
+class ClassifierScoreRequestV2(BaseModel):
+    job_uuid: str
+    classifier_id: int
+    score: float
+    tag_id: int
+    image_hash: str
+    image_source: str    
+    image_uuid: int
+
 class BatchClassifierScoreRequest(BaseModel):
     scores: List[ClassifierScoreRequestV1]
 
+class BatchClassifierScoreRequestV1(BaseModel):
+    scores: List[ClassifierScoreRequestV2]
 
 class RankingSigmaScore(BaseModel):
     model_id: int

@@ -870,32 +870,74 @@ async def list_datasets(request: Request):
                 http_status_code=200
             )       
 
-
 @router.delete("/datasets/remove-dataset",
                description="Remove dataset and its configuration in MongoDB",
                tags=["dataset"],
                response_model=StandardSuccessResponseV1[WasPresentResponse],  
                responses=ApiResponseHandlerV1.listErrors([422]))
-async def remove_dataset(request: Request, dataset: str = Query(...)):
+async def remove_dataset(
+    request: Request, 
+    dataset: str = Query(...), 
+    bucket_id: int = Query(0, description="Bucket ID to filter by, default is 0")
+):
     response_handler = await ApiResponseHandlerV1.createInstance(request)
 
-    # Attempt to delete the dataset
-    dataset_result = request.app.datasets_collection.delete_one({"dataset_name": dataset})
-    # Attempt to delete the dataset configuration
-    config_result = request.app.dataset_config_collection.delete_one({"dataset_name": dataset})
+    # Fetch the dataset entry using the dataset name and bucket_id
+    dataset_entry = request.app.datasets_collection.find_one(
+        {"dataset_name": dataset, "bucket_id": bucket_id}, 
+        {"dataset_id": 1, "bucket_id": 1}
+    )
+    
+    if not dataset_entry:
+        return response_handler.create_success_delete_response_v1(was_present=False)
 
-    # Check if either the dataset or its configuration was present and deleted
-    was_present = dataset_result.deleted_count > 0 or config_result.deleted_count > 0
-    # Return a standard response with wasPresent set to true if there was a deletion
-    return response_handler.create_success_delete_response_v1(was_present)
+    dataset_id = dataset_entry['dataset_id']
+    bucket_id = dataset_entry['bucket_id']
+
+    # Check if the dataset ID is used in the all_images_collection
+    image_exists = request.app.all_images_collection.find_one({"dataset_id": dataset_id})
+    if image_exists:
+        return response_handler.create_error_response_v1(
+            error_code=422,
+            error_string="Dataset is assigned to images in the all_images_collection.",
+            http_status_code=422
+        )
+
+    # Attempt to delete the dataset from the datasets_collection
+    dataset_result = request.app.datasets_collection.delete_one({"dataset_id": dataset_id})
+
+    # Attempt to delete the dataset configuration only if bucket_id = 0
+    if bucket_id == 0:
+        config_result = request.app.dataset_config_collection.delete_one({"dataset_name": dataset})
+    else:
+        config_result = None  # No deletion for non-zero bucket_id
+
+    # Check if the dataset or its configuration was present and deleted
+    was_present = dataset_result.deleted_count != 0 or (config_result and config_result.deleted_count != 0)
+
+    # Return a standard response with was_present set to true if there was a deletion
+    return response_handler.create_success_delete_response_v1(was_present=was_present)
+
+
+
+
 
 @router.delete("/datasets/remove-dataset-v1",
-               description="Remove dataset in MongoDB",
+               description="Remove dataset and its configuration in MongoDB",
                tags=["dataset"],
                response_model=StandardSuccessResponseV1[WasPresentResponse],  
                responses=ApiResponseHandlerV1.listErrors([422]))
 async def remove_dataset_v1(request: Request, dataset_id: int = Query(...)):
     response_handler = await ApiResponseHandlerV1.createInstance(request)
+
+    # Fetch dataset entry
+    dataset_entry = request.app.datasets_collection.find_one({"dataset_id": dataset_id}, {"dataset_name": 1, "bucket_id": 1})
+
+    if not dataset_entry:
+        return response_handler.create_success_delete_response_v1(was_present=False)
+    
+    dataset_name = dataset_entry['dataset_name']
+    bucket_id = dataset_entry['bucket_id']
 
     # Check if the dataset ID exists in the all_images_collection
     image_exists = request.app.all_images_collection.find_one({"dataset_id": dataset_id})
@@ -906,7 +948,18 @@ async def remove_dataset_v1(request: Request, dataset_id: int = Query(...)):
             http_status_code=422
         )
 
-    # Attempt to delete the dataset
+    # Attempt to delete the dataset from the datasets_collection
     dataset_result = request.app.datasets_collection.delete_one({"dataset_id": dataset_id})
-    # Return a standard response with wasPresent set to true if there was a deletion
-    return response_handler.create_success_delete_response_v1(dataset_result.deleted_count != 0)
+
+    # Attempt to delete the dataset configuration only if bucket_id = 0
+    if bucket_id == 0:
+        config_result = request.app.dataset_config_collection.delete_one({"dataset_name": dataset_name})
+    else:
+        config_result = None  # No deletion for non-zero bucket_id
+
+    # Check if the dataset or its configuration was present and deleted
+    was_present = dataset_result.deleted_count != 0 or (config_result and config_result.deleted_count != 0)
+
+    # Return a standard response with was_present set to true if there was a deletion
+    return response_handler.create_success_delete_response_v1(was_present)
+

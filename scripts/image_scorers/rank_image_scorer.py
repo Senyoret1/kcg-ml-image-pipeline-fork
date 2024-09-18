@@ -29,7 +29,7 @@ def parse_args():
     parser.add_argument('--bucket', required=True, help='name of bucket')
     parser.add_argument('--dataset', required=True, help='name of dataset')
     parser.add_argument('--model-type', required=True, help='type of model elm-v1 or linear', default="elm-v1")
-    parser.add_argument('--batch-size', required=False, default=256, type=int, help='batch size of the classifier models')
+    parser.add_argument('--batch-size', required=False, default=10000, type=int, help='batch size of the ranking models')
 
     args = parser.parse_args()
     return args
@@ -75,14 +75,16 @@ class ClipDataset(Dataset):
         return {
             'clip_vector': torch.tensor(self.data[idx]["clip_vector"]).squeeze(),
             'uuid': self.data[idx]["uuid"],
-            'image_hash': self.data[idx]["image_hash"]
+            'image_hash': self.data[idx]["image_hash"],
+            'image_uuid': self.data[idx]["image_uuid"]  
         }
     
 def collate_fn(batch):
     clip_vectors = torch.stack([item['clip_vector'] for item in batch])
     uuids = [item['uuid'] for item in batch]
     image_hashes = [item['image_hash'] for item in batch]
-    return {'uuids': uuids, 'image_hashes':image_hashes , 'clip_vectors': clip_vectors}
+    image_uuids = [item['image_uuid'] for item in batch]  
+    return {'uuids': uuids, 'image_uuids': image_uuids,  'image_hashes': image_hashes, 'clip_vectors': clip_vectors}
 
 def load_model(minio_client, rank_id, model_type, model_path, device):
 
@@ -139,21 +141,20 @@ def calculate_and_upload_scores(rank, world_size, image_dataset, image_source, r
 
             try:
                 for batch_idx, image_data in enumerate(tqdm(dataloader)):
-
                     clip_vector = image_data["clip_vectors"]
                     clip_vector = clip_vector.to(rank_device)
 
                     uuid = image_data["uuids"][0]
                     image_hash = image_data["image_hashes"][0]
-                    
+                    image_uuid = image_data["image_uuids"][0]
                     score = ranking_model.predict_clip(clip_vector).item()
-                    sigma_score= (score - score_mean) / score_std
-                    
+                    sigma_score = (score - score_mean) / score_std
                     score_data = {
                         "rank_model_id": model_id,
                         "rank_id": rank_id,
                         "image_hash": image_hash,
                         "uuid": uuid,
+                        "image_uuid": image_uuid,
                         "score": score,
                         "sigma_score": sigma_score,
                         "image_source": image_source
@@ -216,13 +217,16 @@ def main():
         minio_ip_addr=args.minio_addr
     )
 
+    # set number of gpus
+    world_size = torch.cuda.device_count()
+
     print(f"Load all rank models")
     rank_model_list = request.http_get_ranking_model_list()
     rank_models = {}
     for rank_info in rank_model_list:
         ranking_model_type = rank_info["model_type"]
 
-        if model_type != ranking_model_type:
+        if model_type != ranking_model_type and model_type!="all":
             continue
 
         rank_id = rank_info["rank_id"]
@@ -231,7 +235,7 @@ def main():
         rank_model= None
 
         print(f"Loading the ranking model for rank id: {rank_id}...")
-        rank_model = load_model(minio_client, rank_id, model_type, model_path, torch.device('cpu'))
+        rank_model = load_model(minio_client, rank_id, ranking_model_type, model_path, torch.device('cpu'))
 
         if rank_model is not None:
             rank_models[model_id] = { "model": rank_model, "rank_id": rank_id}
@@ -241,7 +245,6 @@ def main():
         dataset_loader = ImageDatasetLoader(minio_client, bucket_name, dataset_name)
         image_dataset = dataset_loader.load_dataset()
 
-        world_size = torch.cuda.device_count()
         mp.spawn(calculate_and_upload_scores, args=(world_size, image_dataset, image_source, rank_models, batch_size), nprocs=world_size, join=True)
     else:
         dataset_names = get_dataset_list(bucket_name)

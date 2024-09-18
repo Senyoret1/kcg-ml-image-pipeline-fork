@@ -391,7 +391,8 @@ async def random_queue_pair(request: Request, rank_model_id: Optional[int] = Non
 
 @router.post("/rank-training/add-ranking-data-point", 
              status_code=201,
-             tags=['rank-training'],
+             description="changed with /rank-training/add-ranking-data-point-v1",
+             tags=['deprecated3'],
              response_model=StandardSuccessResponseV1[ResponseRankSelection],
              responses=ApiResponseHandlerV1.listErrors([404, 422, 500]))
 async def add_datapoints(request: Request, selection: RankSelection, image_source: str = Query(..., description="Image source to filter by", regex="^(generated_image|external_image|extract_image)$")):
@@ -409,40 +410,36 @@ async def add_datapoints(request: Request, selection: RankSelection, image_sourc
                 http_status_code=404
             )
 
-        policy = None
-        if selection.rank_active_learning_policy_id:
-            policy = request.app.rank_active_learning_policies_collection.find_one(
-                {"rank_active_learning_policy_id": selection.rank_active_learning_policy_id}
-            )
-
-        # Extract policy details only if policy is not None
-        rank_active_learning_policy = policy.get("rank_active_learning_policy", None) if policy else None
-
         current_time = datetime.utcnow().strftime('%Y-%m-%d-%H-%M-%S')
         file_name = f"{current_time}-{selection.username}.json"
-        dataset = selection.image_1_metadata.file_path.split('/')[1]
-        rank_model_string = rank.get("rank_model_string", None)
 
-        # Convert selection to dict and add image_source to image metadata
         dict_data = selection.to_dict()
         dict_data['image_1_metadata']['image_source'] = image_source
         dict_data['image_2_metadata']['image_source'] = image_source
 
-        # Get image_uuid for image_1_metadata
+        # Fetch image_uuid for image_1_metadata
         image_1_hash = dict_data['image_1_metadata']['file_hash']
         image_1_uuid = AllImagesDbController.get_instance().find_image_by_hash(image_1_hash, get_bucket_id(image_source), {"uuid": 1})
         if image_1_uuid.response_type == DatabaseOperationResponseType.SUCCESS and image_1_uuid.response_content:
             dict_data['image_1_metadata']['image_uuid'] = image_1_uuid.response_content['uuid']
         else:
-            print(f"Image UUID not found for image_1_metadata with hash: {image_1_hash}")
+            return api_handler.create_error_response_v1(
+                error_code=ErrorCode.ELEMENT_NOT_FOUND,
+                error_string=f"Image UUID not found for image_1_metadata with hash: {image_1_hash} and source: {image_source}",
+                http_status_code=404
+            )
 
-        # Get image_uuid for image_2_metadata
+        # Fetch image_uuid for image_2_metadata
         image_2_hash = dict_data['image_2_metadata']['file_hash']
         image_2_uuid = AllImagesDbController.get_instance().find_image_by_hash(image_2_hash, get_bucket_id(image_source), {"uuid": 1})
         if image_2_uuid.response_type == DatabaseOperationResponseType.SUCCESS and image_2_uuid.response_content:
             dict_data['image_2_metadata']['image_uuid'] = image_2_uuid.response_content['uuid']
         else:
-            print(f"Image UUID not found for image_2_metadata with hash: {image_2_hash}")
+            return api_handler.create_error_response_v1(
+                error_code=ErrorCode.ELEMENT_NOT_FOUND,
+                error_string=f"Image UUID not found for image_2_metadata with hash: {image_2_hash} and source: {image_source}",
+                http_status_code=404
+            )
 
         # Prepare ordered data for MongoDB insertion
         mongo_data = OrderedDict([
@@ -490,6 +487,7 @@ async def add_datapoints(request: Request, selection: RankSelection, image_sourc
             error_string=str(e),
             http_status_code=500
         )
+
 
 
 
@@ -529,11 +527,6 @@ async def add_datapoints_v1(request: Request, selection: RankSelectionV1):
                 http_status_code=404
             )
 
-        policy = None
-        if selection.rank_active_learning_policy_id:
-            policy = request.app.rank_active_learning_policies_collection.find_one(
-                {"rank_active_learning_policy_id": selection.rank_active_learning_policy_id}
-            )
 
         current_time = datetime.utcnow().strftime('%Y-%m-%d-%H-%M-%S')
         file_name = f"{current_time}-{selection.username}.json"
@@ -547,7 +540,11 @@ async def add_datapoints_v1(request: Request, selection: RankSelectionV1):
         if image_1_uuid.response_type == DatabaseOperationResponseType.SUCCESS and image_1_uuid.response_content:
             dict_data['image_1_metadata']['image_uuid'] = image_1_uuid.response_content['uuid']
         else:
-            print(f"Image UUID not found for image_1_metadata with hash: {image_1_hash} and source: {image_1_source}")
+            return api_handler.create_error_response_v1(
+                error_code=ErrorCode.ELEMENT_NOT_FOUND,
+                error_string=f"Image UUID not found for image_1_metadata with hash: {image_1_hash} and source: {image_1_source}",
+                http_status_code=404
+            )
 
         # Fetch image_uuid for image_2_metadata
         image_2_hash = dict_data['image_2_metadata']['file_hash']
@@ -556,7 +553,11 @@ async def add_datapoints_v1(request: Request, selection: RankSelectionV1):
         if image_2_uuid.response_type == DatabaseOperationResponseType.SUCCESS and image_2_uuid.response_content:
             dict_data['image_2_metadata']['image_uuid'] = image_2_uuid.response_content['uuid']
         else:
-            print(f"Image UUID not found for image_2_metadata with hash: {image_2_hash} and source: {image_2_source}")
+            return api_handler.create_error_response_v1(
+                error_code=ErrorCode.ELEMENT_NOT_FOUND,
+                error_string=f"Image UUID not found for image_2_metadata with hash: {image_2_hash} and source: {image_2_source}",
+                http_status_code=404
+            )
 
         # Prepare ordered data for MongoDB insertion
         mongo_data = OrderedDict([
@@ -604,6 +605,7 @@ async def add_datapoints_v1(request: Request, selection: RankSelectionV1):
             error_string=str(e),
             http_status_code=500
         )
+
 
 
 @router.get("/rank-training/list-ranking-datapoints",

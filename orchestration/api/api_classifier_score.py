@@ -1,12 +1,13 @@
-from fastapi import Request, APIRouter, Query
+from fastapi import Request, APIRouter, Query, HTTPException
 from .api_utils import PrettyJSONResponse, ErrorCode, WasPresentResponse, ApiResponseHandlerV1, StandardSuccessResponseV1, CountResponse
-from orchestration.api.mongo_schemas import ClassifierScore, ListClassifierScore, ClassifierScoreRequest, ClassifierScoreV1, ListClassifierScore1, ListClassifierScore2, ListClassifierScore3, BatchClassifierScoreRequest, ListClassifierScore4
+from orchestration.api.mongo_schemas import ClassifierScore, ListClassifierScore, ClassifierScoreRequest, ClassifierScoreV1, ListClassifierScore1, ListClassifierScore2, ListClassifierScore3, BatchClassifierScoreRequest, ListClassifierScore4, BatchClassifierScoreRequestV1, ListClassifierScore5, ListClassifierScoreWithImageUUID
 from fastapi.encoders import jsonable_encoder
 import uuid
 from typing import Optional
 from datetime import datetime
 from pymongo import UpdateOne
 import time
+from orchestration.api.utils.uuid64 import Uuid64
 from typing import List
 
 
@@ -1103,17 +1104,18 @@ async def set_image_classifier_score_v2(
             query = {
                 "classifier_id": classifier_score.classifier_id,
                 "uuid": classifier_score.job_uuid,
-                "image_source": classifier_score.image_source
+                "image_source": classifier_score.image_source,
             }
 
             new_score_data = {
                 "uuid": classifier_score.job_uuid,
+                "image_uuid": Uuid64.from_formatted_string(classifier_score.image_uuid).to_mongo_value(),
                 "classifier_id": classifier_score.classifier_id,
                 "tag_id": classifier_score.tag_id,
                 "score": classifier_score.score,
                 "image_hash": classifier_score.image_hash,
                 "creation_time": datetime.utcnow().isoformat(),
-                "image_source": classifier_score.image_source
+                "image_source": classifier_score.image_source,
             }
 
             update_operation = UpdateOne(
@@ -1138,6 +1140,7 @@ async def set_image_classifier_score_v2(
             error_string=str(e),
             http_status_code=500
         )
+         
     
 
 @router.post("/pseudotag-classifier-scores/set-image-classifier-scores-in-bulk", 
@@ -1160,7 +1163,8 @@ async def set_image_classifier_score_bulk(
             query = {
                 "classifier_id": classifier_score.classifier_id,
                 "uuid": classifier_score.job_uuid,
-                "image_source": classifier_score.image_source
+                "image_source": classifier_score.image_source,
+                
             }
 
             new_score_data = {
@@ -1170,7 +1174,8 @@ async def set_image_classifier_score_bulk(
                 "score": classifier_score.score,
                 "image_hash": classifier_score.image_hash,
                 "creation_time": datetime.utcnow().isoformat(),
-                "image_source": classifier_score.image_source
+                "image_source": classifier_score.image_source,
+                "image_uuid": Uuid64.from_formatted_string(classifier_score.image_uuid).to_mongo_value()
             }
 
             update_operation = UpdateOne(
@@ -1195,6 +1200,9 @@ async def set_image_classifier_score_bulk(
             error_string=str(e),
             http_status_code=500
         )    
+
+
+
 
 
 @router.post("/pseudotag-classifier-scores/set-image-classifier-score-list-v1", 
