@@ -203,7 +203,7 @@ def add_tag_to_image(request: Request, tag_id: int, file_hash: str, tag_type: in
         existing_image_tag = request.app.image_tags_collection.find_one({
             "tag_id": tag_id, 
             "image_hash": file_hash, 
-            "image_source": 'generated_image'
+            "image_source": generated_image
         })
         if existing_image_tag:
             existing_image_tag.pop('_id', None)  # Remove _id from the existing document
@@ -218,7 +218,7 @@ def add_tag_to_image(request: Request, tag_id: int, file_hash: str, tag_type: in
             "file_path": file_path,  
             "image_hash": file_hash,
             "tag_type": tag_type,
-            "image_source": 'generated_image',
+            "image_source": generated_image,
             "user_who_created": user_who_created,
             "tag_count": 1,
             "creation_time": date_now
