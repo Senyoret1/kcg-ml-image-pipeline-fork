@@ -34,24 +34,22 @@ If needed, subcategories must be added after the category, but before the endpoi
 
 ### Naming considerations:
 
-- The endpoint names should normally have a verb indicating the action and then the affected element. For example,
-`/images/get-image-details` starts with the `get` verb, which clearly indicates that the endpoint if for obtaining data,
-and then continues with the affected element. Another way to see this is adding first "what will I do" and then "with what".
+- The endpoint names should normally have 2 or 3 parts: a verb indicating the action, then the affected element and then
+the main property that will be used for completing the operation. For example, `/images/get-image-details-by-hash` starts
+with the `get` verb, which clearly indicates that the endpoint is for obtaining data; then continues with the element that
+is going to be obtained, which in this case is an `image`; and at the end includes the property for getting the data,
+which is the image hash. Another way to see this is adding first "what will I do", then "to what" and then "how". The first
+2 parts are mandatory, but the last element depends on the case, as it may not make sense for some endpoints.
 
-- The names must be complete, something like `/images/get-details` may leave users asking "details of what". Do not asume that
-having the endpoint in the  `images` categories responds that question, as the name may become ambiguous in the future if the
-`/images/` category grows to include another kind of element, for any reason.
+- The names must be complete. Something like `/images/get-details` may leave users asking "details of what?". Do not asume that
+having the endpoint in the  `images` category responds that question.
 
 - All words must be separated with hyphens, not underscores or uppercase letters. This is `element-name`,
 instead of `element_name` or `elementName`.
 
-- If the endpoint performs a request with a special param or filter, it should be added to the name, but only if
-it is a special case. For example, `/images/get-image-details-by-hash` may be a special case, different from
-`/images/get-image-details`.
+At this moment, we have some verbs that should be used at the start of the endpoint names whenever possible:
 
-At this moment, we have some verbs that should be used at the start of the endpoint names in some situations:
-
-- `get`: when getting data about an specific element.
+- `get`: when getting data about a specific element.
 
 - `list`: when getting a list with various elements.
 
@@ -79,30 +77,40 @@ All API endpoints must return the responses using a standard format.
 
 ### Basic response format
 
-There is a set of params with information about the request that all endpoints must include in the response.
+There is a set of params with information about the request that all endpoints must include in the responses.
 The format is in the `StandardSuccessResponseV1` and `StandardErrorResponseV1` classes in `api_utils.py`.
-However, this data must not be added manually, the data is added using the helper methods from `api_utils.py`.
-Here is the process:
+However, this data must not be added manually, the data is added using the helper methods from the
+`ApiResponseHandlerV1` class. Here is the process:
 
-- The first line for all endpoints should be `response_handler = await ApiResponseHandlerV1.createInstance(request)`.
-this creates the helper object that will keep track of the excecution stats and will allow to create the responses.
+- Each endpoint function receives a `request: Request` param. All those request objects includes an instance of
+`StandardErrorResponseV1` in the `request.state.response_handler` property. You must use the helper functions provided
+by that instance to create the API responses.
 
-- If you are going to return a success response, use `return response_handler.create_success_response_v1(...)`, providing
-to it the http status code and the response object that will be returned.
+- If the endpoint just makes a database operation by caling a function, and that function returns an instance of
+`DatabaseOperationResponse`, you can create the full response that the endpoint will return just by calling
+`request.state.response_handler.process_normal_database_response(operation_response)`. That helper function will
+take care of checking if the database operation finished correctly and return the correct response, including all
+the extra data ouw API is expected to return about the request. If the endpoint calls a function for removing data,
+the correct helper function is `request.state.response_handler.process_deletion_database_response(operation_response)`.
+
+- If you are going to return a success response and can't use any of the helper functions mentioned in the previous
+point, use `request.state.response_handler.create_success_response_v1(...)`, providing
+to it the http status code and the response object that will be returned. That helper function will create a response
+that the endpoint function can return, including all the extra that out API endpoints are expected to return.
 
 - If you are going to return a success response, but the endpoint is for deleting data, use
-`return response_handler.create_success_delete_response_v1(...)` instead. See the section about delete responses for
+`request.state.response_handler.create_success_delete_response_v1(...)` instead. See the section about delete responses for
 more information.
 
-- If you are going to return an error, use `return response_handler.create_error_response_v1(...)`. See the section about
+- If you are going to return an error, use `request.state.response_handler.create_error_response_v1(...)`. See the section about
 error responses for more information.
 
 ### Response content
 
-When using `return response_handler.create_success_response_v1(...)`, you must always provide an object as the response.
-This means that if an endpoint is for returning an array, the response must not be a plain array, the array must be wrapped
-in an object like `{list: []}`. The same goes for numeric responses and all other response types. This will allow to add additional
-fileds to the response in the future, if needed, without introducing breaking changes.
+When returning endpoint responses, you must always return objects. This means that if an endpoint is for returning an array, the
+response must not be a plain array, the array must be wrapped in an object like `{list: []}`. The same goes for numeric responses
+and all other response types. This will allow to add additional fileds to the response in the future, if needed, without
+introducing breaking changes.
 
 If the endpoint is for getting a list of elements, and no element is found, return an empty array instead of error 404.
 
@@ -111,7 +119,7 @@ on the http request method:
 
 `GET`: the requested data.
 
-`POST`: the contents of the created element.
+`POST`: the contents of the element that was created.
 
 `PUT`: the contents of the updated element.
 
@@ -119,15 +127,15 @@ on the http request method:
 
 ### Delete responses
 
-Endpoints for deleting objects must return a success HTTP status code in the following circunstances:
+The endpoints for deleting objects must return a success HTTP status code in the following circunstances:
 
 - If the object was found and removed.
 - If the object was not found, so there was no need to delete it.
 
-This is because the objective of the delete operation is to make the element "not to be" in the server, and that
+This is because the objective of a delete operation is to make the element "not to be" in the server, and that
 happens in both cases.
 
-To return the response, use `return response_handler.create_success_delete_response_v1(...)`. This will return a
+To return the response, use `request.state.response_handler.create_success_delete_response_v1(...)`. This will return a
 response like this:
 
 ```
@@ -139,10 +147,12 @@ response like this:
 This object will allow to know if the element was in the server and was deleted (true) or if it was already not in
 the server and nothing had to be done (false).
 
+NOTE: the response will be different for endpoints that delete more than one element, but that has not be fully defined yet.
+
 ### Error responses
 
 When there is a response with an error status code (like 4xx or 5xx), the API must always return the responses with
-`return response_handler.create_error_response_v1(...)`. This function adds the error information to the responses.
+`request.state.response_handler.create_error_response_v1(...)`. This function adds the error information to the responses.
 
 In the `error_code` param you must use a value from the `ErrorCode` enum. This will help clients to know that
 the error was thrown by the API code (so it was not an automatic server error) and what went wrong.
@@ -150,7 +160,7 @@ the error was thrown by the API code (so it was not an automatic server error) a
 The current values are:
 
 - `ELEMENT_NOT_FOUND` (the actual value is `2`): basically error 404. Use it when the requested element was not found.
-Do not return this if a list with elements was requested and no element was found (return an empty array in this case).
+Do not return this if a list with elements was requested and no element was found (return an empty array in that case).
 
 - `INVALID_PARAMS` (the actual value is `3`): return this if any param sent in the request is invalid. This normally
 refers to validation errors, but this response must be used also if the user sends as param the ID of an element that
@@ -159,7 +169,7 @@ this, the http error code normally is 422.
 
 - `OTHER_ERROR` (the actual value is `0`): Use this for any other type of error.
 
-In the `error_string` param write small description of what when wrong, mainly for debugging purpouses.
+In the `error_string` param write a small description of what when wrong, mainly for debugging purpouses.
 
 In the `http_status_code` param set the http error code that must be returned, like 404 or 500.
 
@@ -176,7 +186,8 @@ This helps FastApi to validate the data and create the automatic documentation p
 
 All API endpoints must validate the params. The automatic features of FastAPI for validating data types must be used.
 However, the basic validation FastApi provide is only for checking data types and if all the required params were added.
-Please add any extra validation code that could be needed.
+
+When a param can only receive a specific list of predefined values, use an Enum for the param datatype.
 
 ## Fast API documentation
 
