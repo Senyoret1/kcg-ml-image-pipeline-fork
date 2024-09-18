@@ -9,12 +9,10 @@ base_directory = "./"
 sys.path.insert(0, base_directory)
 from utility.minio import cmd
 
-# MongoDB connection setup
 mongo_client = MongoClient('mongodb://192.168.3.1:32017/')
 db = mongo_client['orchestration-job-db']  
 collection = db['image_tags']  
 
-# Minio connection setup
 minio_client = Minio(
     "192.168.3.5:9000",  
     access_key="v048BpXpWrsVIHUfdAix", 
@@ -46,6 +44,9 @@ for doc in documents:
             if stat_error.code != 'NoSuchKey':
                 print(f"Error while checking if file exists: {stat_error}")
                 continue  # Skip this iteration if there's an error other than 'NoSuchKey'
+
+        # Remove the '_id' field before uploading the document
+        doc.pop('_id', None)
 
         # Convert the MongoDB document to JSON format
         json_data = json.dumps(doc, default=str)
