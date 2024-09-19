@@ -5,14 +5,11 @@ from typing import List
 from pydantic import validate_call
 from pymongo.collection import Collection
 from pymongo.database import Database
-import pymongo.database
 
+from orchestration.api.api_controllers.all_images.all_images_db_controller import AllImagesDbController
 from orchestration.api.api_controllers.buckets.buckets_db_schemas import BucketsDbSchemas
 from orchestration.api.api_controllers.database_collection_controller_base import DatabaseCollectionControllerBase
-from orchestration.api.utils.api_operations_utils import ApiUtils
 from orchestration.api.utils.database_operation_response import DatabaseOperationResponse, DatabaseOperationResponseType
-from orchestration.api.utils.date_filter_objects import DateFilterParams, ElapsedTimeFilterParams, ElapsedTimeUnit
-from orchestration.api.utils.uuid64 import Uuid64
 
 class BucketsDbController(DatabaseCollectionControllerBase['BucketsDbController']):
     @classmethod
@@ -89,10 +86,24 @@ class BucketsDbController(DatabaseCollectionControllerBase['BucketsDbController'
                     error_description="The first 3 buckets cannot be removed."
                 )
 
+            # Check if the bucket is referenced in any entry in the all images collection.
+            bucket_in_use_response = AllImagesDbController.get_instance().find_single_image(None, bucket_id)
+            if bucket_in_use_response.response_type != DatabaseOperationResponseType.SUCCESS:
+                return DatabaseOperationResponse(
+                    response_type = bucket_in_use_response.response_type,
+                    error_description = f"Error trying to delete the bucket: {bucket_in_use_response.error_description}"
+                )
+            
+            if bucket_in_use_response.response_content != None:
+                return DatabaseOperationResponse(
+                    response_type = DatabaseOperationResponseType.REQUEST_REJECTED,
+                    error_description = f"Bucket with ID {bucket_id} is in use and cannot be removed."
+                )
+
             result = self.collection.delete_one({"bucket_id": bucket_id})
             return DatabaseOperationResponse(response_content=result.deleted_count)
         except Exception as e:
-            raise Exception(f"Error while deleting a bucket using the {bucket_id} id in database: {e}")
+            raise Exception(f"Error while deleting a bucket using the id {bucket_id} in database: {e}")
 
     def _perform_db_element_processing(self, data: dict):
         data.pop('_id', None)

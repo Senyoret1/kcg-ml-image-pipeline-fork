@@ -419,7 +419,7 @@ async def add_datapoints(request: Request, selection: RankSelection, image_sourc
 
         # Fetch image_uuid for image_1_metadata
         image_1_hash = dict_data['image_1_metadata']['file_hash']
-        image_1_uuid = AllImagesDbController.get_instance().find_image_by_hash(image_1_hash, get_bucket_id(image_source), {"uuid": 1})
+        image_1_uuid = AllImagesDbController.get_instance().find_single_image(image_1_hash, get_bucket_id(image_source), {"uuid": 1})
         if image_1_uuid.response_type == DatabaseOperationResponseType.SUCCESS and image_1_uuid.response_content:
             dict_data['image_1_metadata']['image_uuid'] = image_1_uuid.response_content['uuid']
         else:
@@ -431,7 +431,7 @@ async def add_datapoints(request: Request, selection: RankSelection, image_sourc
 
         # Fetch image_uuid for image_2_metadata
         image_2_hash = dict_data['image_2_metadata']['file_hash']
-        image_2_uuid = AllImagesDbController.get_instance().find_image_by_hash(image_2_hash, get_bucket_id(image_source), {"uuid": 1})
+        image_2_uuid = AllImagesDbController.get_instance().find_single_image(image_2_hash, get_bucket_id(image_source), {"uuid": 1})
         if image_2_uuid.response_type == DatabaseOperationResponseType.SUCCESS and image_2_uuid.response_content:
             dict_data['image_2_metadata']['image_uuid'] = image_2_uuid.response_content['uuid']
         else:
@@ -536,7 +536,7 @@ async def add_datapoints_v1(request: Request, selection: RankSelectionV1):
         # Fetch image_uuid for image_1_metadata
         image_1_hash = dict_data['image_1_metadata']['file_hash']
         image_1_source = dict_data['image_1_metadata']['image_source']
-        image_1_uuid = AllImagesDbController.get_instance().find_image_by_hash(image_1_hash, get_bucket_id(image_1_source), {"uuid": 1})
+        image_1_uuid = AllImagesDbController.get_instance().find_single_image(image_1_hash, get_bucket_id(image_1_source), {"uuid": 1})
         if image_1_uuid.response_type == DatabaseOperationResponseType.SUCCESS and image_1_uuid.response_content:
             dict_data['image_1_metadata']['image_uuid'] = image_1_uuid.response_content['uuid']
         else:
@@ -549,7 +549,7 @@ async def add_datapoints_v1(request: Request, selection: RankSelectionV1):
         # Fetch image_uuid for image_2_metadata
         image_2_hash = dict_data['image_2_metadata']['file_hash']
         image_2_source = dict_data['image_2_metadata']['image_source']
-        image_2_uuid = AllImagesDbController.get_instance().find_image_by_hash(image_2_hash, get_bucket_id(image_2_source), {"uuid": 1})
+        image_2_uuid = AllImagesDbController.get_instance().find_single_image(image_2_hash, get_bucket_id(image_2_source), {"uuid": 1})
         if image_2_uuid.response_type == DatabaseOperationResponseType.SUCCESS and image_2_uuid.response_content:
             dict_data['image_2_metadata']['image_uuid'] = image_2_uuid.response_content['uuid']
         else:

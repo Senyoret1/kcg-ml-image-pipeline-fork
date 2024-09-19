@@ -4,13 +4,13 @@ from orchestration.api.api_utils import ApiResponseHandlerV1, ErrorCode
 
 class KcgRequestsMiddleware():
     '''
-    Includes a function called "process_requests" that works as a FastAPI middleware. The functions do some
+    Includes a function called "process_requests" that works as a FastAPI middleware. The function does some
     important things:
 
         - Processes all the uncatched errors raised during the excecution of any endpoint and returns a standarized
         error response to the client, instead of a plain error 500 responses that FastAPI would return by default.
 
-        - Makes the request object include a object for creating standarized API responses. The object can be accesed
+        - Makes the request object include an object for creating standarized API responses. The object can be accesed
         in the endpoints code in "request.state.response_handler".
     '''
     @staticmethod

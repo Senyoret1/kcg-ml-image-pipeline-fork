@@ -108,11 +108,13 @@ class AllImagesDbController(DatabaseCollectionControllerBase['AllImagesDbControl
         except Exception as e:
             raise Exception(f"Error while getting a filtered images list from the all images collection: {e}")
         
-    def find_image_by_hash(
-        self, image_hash: str, bucket_id: Optional[int] = None, values_to_get: Optional[dict] = None
+    def find_single_image(
+        self, image_hash: Optional[str] = None, bucket_id: Optional[int] = None, values_to_get: Optional[dict] = None
     ) -> DatabaseOperationResponse[AllImagesDbSchemas.DatabaseSchema | None]:
         try:
-            query = {"image_hash": image_hash}
+            query = {}
+            if image_hash != None:
+                query["image_hash"] = image_hash
             if bucket_id != None:
                 query["bucket_id"] = bucket_id
 

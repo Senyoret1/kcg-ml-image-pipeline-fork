@@ -15,6 +15,12 @@ from typing import List
 from PIL import Image
 import time
 
+'''
+TODO: this file must be removed, as almost all the endpoints were moved to the new "api_controllers/all_images/api_all_images.py" file.
+Only the "/all-images/list-images-with-random-sampling" endpoint was only partially moved. After that endpoint is fully migrated,
+the file can be finally removed.
+'''
+
 router = APIRouter()
 
 @router.get("/all-images/list-images",
